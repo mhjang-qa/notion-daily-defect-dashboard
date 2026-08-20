@@ -124,6 +124,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       <form id="admin-form" class="modal">
         <h2>관리자 확인</h2>
         <p>동기화 화면은 관리자 비밀번호 확인 후 열립니다.</p>
+        <input type="text" name="username" value="admin" autocomplete="username" hidden />
         <label for="admin-password">비밀번호</label>
         <input id="admin-password" type="password" autocomplete="current-password" />
         <div id="admin-message" class="modal-message"></div>
@@ -449,7 +450,11 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         }}
       }});
       refreshPage.addEventListener("click", () => {{
-        window.location.reload();
+        refreshPage.disabled = true;
+        refreshPage.textContent = "새로고침 중";
+        const url = new URL(window.location.href);
+        url.searchParams.set("refresh", String(Date.now()));
+        window.location.replace(url.toString());
       }});
 
       render();
