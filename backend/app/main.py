@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from .config import get_settings
+from .config import BACKEND_DIR, get_settings
 from .database import SessionLocal, get_session, init_db
 from .notion_repository import NotionRepository
 from .scheduler import build_scheduler, collect_async, run_collection
@@ -115,6 +115,15 @@ def index():
 @app.head("/", response_model=None)
 def index_head():
     return Response(status_code=200)
+
+
+@app.get("/embed/hanpass-renewal", response_model=None)
+@app.get("/embed/hanpass-renewal.html", response_model=None)
+def hanpass_renewal_embed():
+    embed_path = BACKEND_DIR / "static" / "embed" / "hanpass-renewal.html"
+    if embed_path.exists():
+        return FileResponse(embed_path)
+    raise HTTPException(status_code=404, detail="Embed page not found")
 
 
 @app.get("/{full_path:path}", response_model=None)

@@ -89,6 +89,7 @@ DATABASE_URL=sqlite:////tmp/defects.db
 - `/`: React Dashboard
 - `/api/health`: 서버 상태
 - `/api/collect`: 수동 Snapshot 수집
+- `/embed/hanpass-renewal`: `[Hanpass][앱개편]`, `[Hanpass][앱개편][BO]` 전용 Notion Embed
 
 ## GitHub Pages 랜딩
 
