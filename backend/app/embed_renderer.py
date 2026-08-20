@@ -128,7 +128,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           ["완료", resolved],
         ].map(([label, value]) => `<article class="card"><span>${{label}}</span><strong>${{value}}</strong></article>`).join("");
         versions.innerHTML = groups.map(renderGroup).join("");
-        charts.innerHTML = renderCharts(aggregateRows(groups));
+        charts.innerHTML = renderCharts(groups);
       }}
 
       function renderGroup(group) {{
@@ -186,24 +186,74 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         return Array.from(byDate.values()).sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
       }}
 
-      function renderCharts(rows) {{
+      function combinedRows(groups) {{
+        const dates = Array.from(new Set(groups.flatMap((group) => group.rows.map((row) => row.snapshot_date)))).sort();
+        return dates.map((date) => {{
+          const item = {{ snapshot_date: date }};
+          groups.forEach((group, groupIndex) => {{
+            const row = group.rows.find((candidate) => candidate.snapshot_date === date) || {{}};
+            ["total_count", "new_count", "unresolved_count", "in_progress_count", "resolved_count", "completed_today_count"].forEach((key) => {{
+              item[`g${{groupIndex}}_${{key}}`] = Number(row[key]) || 0;
+            }});
+          }});
+          return item;
+        }});
+      }}
+
+      function groupLabel(version) {{
+        return version.includes("[BO]") ? "BO" : "앱";
+      }}
+
+      function renderCharts(groups) {{
+        const activeGroups = groups.filter((group) => group.rows.length);
+        const rows = combinedRows(activeGroups);
         if (!rows.length) {{
           return `<article class="chart-panel"><div class="chart-head"><h2>Daily Defect Trend</h2><span>전체 / 미처리 / 처리중 / 완료</span></div><p class="empty">그래프를 표시할 Snapshot 데이터가 없습니다.</p></article>`;
         }}
+        const dailyColors = {{
+          total_count: "#1f6feb",
+          unresolved_count: "#d1242f",
+          in_progress_count: "#bf8700",
+          resolved_count: "#1a7f37",
+        }};
+        const dailyLabels = {{
+          total_count: "전체",
+          unresolved_count: "미처리",
+          in_progress_count: "처리중",
+          resolved_count: "완료",
+        }};
+        const dailySeries = activeGroups.flatMap((group, groupIndex) =>
+          Object.keys(dailyLabels).map((key) => [
+            `g${{groupIndex}}_${{key}}`,
+            dailyColors[key],
+            `${{groupLabel(group.version)}} ${{dailyLabels[key]}}`,
+            groupIndex === 1 ? "6 4" : "",
+          ])
+        );
+        const newSeries = activeGroups.map((group, groupIndex) => [
+          `g${{groupIndex}}_new_count`,
+          groupIndex === 0 ? "#1f6feb" : "#8250df",
+          `${{groupLabel(group.version)}} 신규`,
+        ]);
         return `
           <article class="chart-panel">
             <div class="chart-head"><h2>Daily Defect Trend</h2><span>전체 / 미처리 / 처리중 / 완료</span></div>
-            <div class="chart-box">${{lineChart(rows, [["total_count", "#1f6feb", "전체"], ["unresolved_count", "#d1242f", "미처리"], ["in_progress_count", "#bf8700", "처리중"], ["resolved_count", "#1a7f37", "완료"]])}}</div>
-            ${{legend([["#1f6feb", "전체"], ["#d1242f", "미처리"], ["#bf8700", "처리중"], ["#1a7f37", "완료"]])}}
+            <div class="chart-box">${{lineChart(rows, dailySeries)}}</div>
+            ${{legend(dailySeries.map(([, color, label, dash]) => [color, label, dash]))}}
           </article>
           <article class="chart-panel">
             <div class="chart-head"><h2>New Defects</h2><span>일자별 신규 발생량</span></div>
-            <div class="chart-box">${{barChart(rows, "new_count", "#1f6feb", "신규")}}</div>
+            <div class="chart-box">${{groupedBarChart(rows, newSeries)}}</div>
+            ${{legend(newSeries.map(([, color, label]) => [color, label]))}}
           </article>
           <article class="chart-panel">
             <div class="chart-head"><h2>Resolution Progress</h2><span>신규 / 완료 / 미처리 잔량</span></div>
-            <div class="chart-box">${{comboChart(rows)}}</div>
-            ${{legend([["#1f6feb", "신규"], ["#1a7f37", "완료"], ["#d1242f", "미처리"]])}}
+            <div class="chart-box">${{comboChart(rows, activeGroups)}}</div>
+            ${{legend(activeGroups.flatMap((group, groupIndex) => [
+              [groupIndex === 0 ? "#1f6feb" : "#8250df", `${{groupLabel(group.version)}} 신규`],
+              [groupIndex === 0 ? "#1a7f37" : "#2da44e", `${{groupLabel(group.version)}} 완료`],
+              [groupIndex === 0 ? "#d1242f" : "#cf222e", `${{groupLabel(group.version)}} 미처리`, groupIndex === 1 ? "6 4" : ""],
+            ]))}}
           </article>`;
       }}
 
@@ -233,10 +283,11 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
 
       function lineChart(rows, series) {{
         const scale = chartScales(rows, series.map(([key]) => key));
-        const lines = series.map(([key, color, label]) => {{
+        const lines = series.map(([key, color, label, dash]) => {{
           const points = rows.map((row, index) => `${{scale.x(index)}},${{scale.y(row[key])}}`).join(" ");
           const dots = rows.map((row, index) => `<circle cx="${{scale.x(index)}}" cy="${{scale.y(row[key])}}" r="3.5" fill="${{color}}"><title>${{formatDate(row.snapshot_date)}} ${{label}}: ${{row[key]}}</title></circle>`).join("");
-          return `<polyline points="${{points}}" fill="none" stroke="${{color}}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>${{dots}}`;
+          const dashAttr = dash ? ` stroke-dasharray="${{dash}}"` : "";
+          return `<polyline points="${{points}}" fill="none" stroke="${{color}}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"${{dashAttr}}></polyline>${{dots}}`;
         }}).join("");
         return `<svg viewBox="0 0 ${{scale.width}} ${{scale.height}}" role="img" aria-label="Daily Defect Trend">${{grid(rows, scale)}}${{lines}}</svg>`;
       }}
@@ -255,24 +306,56 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         return `<svg viewBox="0 0 ${{scale.width}} ${{scale.height}}" role="img" aria-label="${{label}}">${{grid(rows, scale)}}${{bars}}</svg>`;
       }}
 
-      function comboChart(rows) {{
-        const scale = chartScales(rows, ["new_count", "completed_today_count", "unresolved_count"]);
+      function groupedBarChart(rows, series) {{
+        const scale = chartScales(rows, series.map(([key]) => key));
         const step = scale.plotWidth / Math.max(1, rows.length);
-        const barWidth = Math.max(8, Math.min(24, step / 4));
-        const bars = rows.map((row, index) => {{
-          const center = scale.pad.left + step * index + step / 2;
-          const newY = scale.y(row.new_count);
-          const doneY = scale.y(row.completed_today_count);
-          const base = scale.height - scale.pad.bottom;
-          return `<rect x="${{center - barWidth - 2}}" y="${{newY}}" width="${{barWidth}}" height="${{base - newY}}" rx="3" fill="#1f6feb"><title>${{formatDate(row.snapshot_date)}} 신규: ${{row.new_count}}</title></rect><rect x="${{center + 2}}" y="${{doneY}}" width="${{barWidth}}" height="${{base - doneY}}" rx="3" fill="#1a7f37"><title>${{formatDate(row.snapshot_date)}} 완료: ${{row.completed_today_count}}</title></rect>`;
+        const groupWidth = Math.min(72, step * 0.74);
+        const barWidth = Math.max(8, Math.min(28, groupWidth / Math.max(1, series.length)));
+        const bars = rows.flatMap((row, rowIndex) => series.map(([key, color, label], seriesIndex) => {{
+          const groupStart = scale.pad.left + step * rowIndex + (step - barWidth * series.length) / 2;
+          const x = groupStart + barWidth * seriesIndex;
+          const y = scale.y(row[key]);
+          const height = scale.height - scale.pad.bottom - y;
+          return `<rect x="${{x}}" y="${{y}}" width="${{barWidth - 2}}" height="${{height}}" rx="3" fill="${{color}}"><title>${{formatDate(row.snapshot_date)}} ${{label}}: ${{row[key]}}</title></rect>`;
+        }})).join("");
+        return `<svg viewBox="0 0 ${{scale.width}} ${{scale.height}}" role="img" aria-label="New Defects">${{grid(rows, scale)}}${{bars}}</svg>`;
+      }}
+
+      function comboChart(rows, groups) {{
+        const keys = groups.flatMap((_, groupIndex) => [`g${{groupIndex}}_new_count`, `g${{groupIndex}}_completed_today_count`, `g${{groupIndex}}_unresolved_count`]);
+        const scale = chartScales(rows, keys);
+        const step = scale.plotWidth / Math.max(1, rows.length);
+        const barSeries = groups.flatMap((group, groupIndex) => [
+          [`g${{groupIndex}}_new_count`, groupIndex === 0 ? "#1f6feb" : "#8250df", `${{groupLabel(group.version)}} 신규`],
+          [`g${{groupIndex}}_completed_today_count`, groupIndex === 0 ? "#1a7f37" : "#2da44e", `${{groupLabel(group.version)}} 완료`],
+        ]);
+        const barWidth = Math.max(6, Math.min(18, (step * 0.72) / Math.max(1, barSeries.length)));
+        const base = scale.height - scale.pad.bottom;
+        const bars = rows.flatMap((row, rowIndex) => barSeries.map(([key, color, label], seriesIndex) => {{
+          const groupStart = scale.pad.left + step * rowIndex + (step - barWidth * barSeries.length) / 2;
+          const x = groupStart + barWidth * seriesIndex;
+          const y = scale.y(row[key]);
+          return `<rect x="${{x}}" y="${{y}}" width="${{barWidth - 1}}" height="${{base - y}}" rx="3" fill="${{color}}"><title>${{formatDate(row.snapshot_date)}} ${{label}}: ${{row[key]}}</title></rect>`;
+        }})).join("");
+        const lines = groups.map((group, groupIndex) => {{
+          const key = `g${{groupIndex}}_unresolved_count`;
+          const color = groupIndex === 0 ? "#d1242f" : "#cf222e";
+          const label = `${{groupLabel(group.version)}} 미처리`;
+          const points = rows.map((row, index) => `${{scale.x(index)}},${{scale.y(row[key])}}`).join(" ");
+          const dots = rows.map((row, index) => `<circle cx="${{scale.x(index)}}" cy="${{scale.y(row[key])}}" r="3.5" fill="${{color}}"><title>${{formatDate(row.snapshot_date)}} ${{label}}: ${{row[key]}}</title></circle>`).join("");
+          const dashAttr = groupIndex === 1 ? ` stroke-dasharray="6 4"` : "";
+          return `<polyline points="${{points}}" fill="none" stroke="${{color}}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"${{dashAttr}}></polyline>${{dots}}`;
         }}).join("");
-        const points = rows.map((row, index) => `${{scale.x(index)}},${{scale.y(row.unresolved_count)}}`).join(" ");
-        const dots = rows.map((row, index) => `<circle cx="${{scale.x(index)}}" cy="${{scale.y(row.unresolved_count)}}" r="3.5" fill="#d1242f"><title>${{formatDate(row.snapshot_date)}} 미처리: ${{row.unresolved_count}}</title></circle>`).join("");
-        return `<svg viewBox="0 0 ${{scale.width}} ${{scale.height}}" role="img" aria-label="Resolution Progress">${{grid(rows, scale)}}${{bars}}<polyline points="${{points}}" fill="none" stroke="#d1242f" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>${{dots}}</svg>`;
+        return `<svg viewBox="0 0 ${{scale.width}} ${{scale.height}}" role="img" aria-label="Resolution Progress">${{grid(rows, scale)}}${{bars}}${{lines}}</svg>`;
       }}
 
       function legend(items) {{
-        return `<div class="legend">${{items.map(([color, label]) => `<span><i style="background:${{color}}"></i>${{label}}</span>`).join("")}}</div>`;
+        return `<div class="legend">${{items.map(([color, label, dash]) => {{
+          const marker = dash
+            ? `<i style="background:transparent;border-top:2px dashed ${{color}};border-radius:0;height:0;vertical-align:middle"></i>`
+            : `<i style="background:${{color}}"></i>`;
+          return `<span>${{marker}}${{label}}</span>`;
+        }}).join("")}}</div>`;
       }}
 
       function formatDate(value) {{
