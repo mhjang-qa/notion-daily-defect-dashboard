@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from threading import Thread
+from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
@@ -30,6 +29,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+frontend_dist = settings.frontend_dist_path
+assets_dir = frontend_dist / "assets"
+if assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
 
 @app.on_event("startup")
 def startup() -> None:
@@ -39,11 +43,6 @@ def startup() -> None:
         scheduler = build_scheduler(settings)
         scheduler.start()
         Thread(target=_collect_missing_today_snapshot, daemon=True).start()
-
-    frontend_dist = settings.frontend_dist_path
-    assets_dir = frontend_dist / "assets"
-    if assets_dir.exists() and not any(route.path == "/assets" for route in app.routes):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
 
 @app.on_event("shutdown")
@@ -111,6 +110,11 @@ def index():
     if index_path.exists():
         return FileResponse(index_path)
     return {"status": "ok", "message": "Frontend build not found. Run npm run build in frontend."}
+
+
+@app.head("/", response_model=None)
+def index_head():
+    return Response(status_code=200)
 
 
 @app.get("/{full_path:path}", response_model=None)
