@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from threading import Thread
+import hashlib
+import hmac
+import time
 from datetime import datetime
+from threading import Thread
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .config import get_settings
@@ -21,6 +25,13 @@ from .snapshot_service import SnapshotService
 settings = get_settings()
 app = FastAPI(title="Notion Daily Defect Dashboard", version="0.1.0")
 scheduler = None
+ADMIN_PASSWORD = "xptmxm123!"
+ADMIN_COOKIE_NAME = "hanpass_embed_admin"
+ADMIN_COOKIE_TTL_SECONDS = 12 * 60 * 60
+
+
+class AdminLoginRequest(BaseModel):
+    password: str
 
 app.add_middleware(
     CORSMiddleware,
@@ -82,7 +93,8 @@ async def collect_now() -> CollectResponse:
 
 
 @app.post("/api/embed/hanpass-renewal/sync")
-async def sync_hanpass_renewal_embed() -> dict[str, str | bool]:
+async def sync_hanpass_renewal_embed(request: Request) -> dict[str, str | bool]:
+    require_embed_admin(request)
     try:
         await collect_async(settings)
         with SessionLocal() as session:
@@ -90,6 +102,23 @@ async def sync_hanpass_renewal_embed() -> dict[str, str | bool]:
         return {"ok": True, "generated_path": str(generated_path)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/embed/hanpass-renewal/admin-login")
+def login_hanpass_renewal_embed_admin(payload: AdminLoginRequest, request: Request) -> JSONResponse:
+    if not hmac.compare_digest(payload.password, ADMIN_PASSWORD):
+        raise HTTPException(status_code=401, detail="Invalid password")
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        ADMIN_COOKIE_NAME,
+        make_embed_admin_token(),
+        max_age=ADMIN_COOKIE_TTL_SECONDS,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        path="/",
+    )
+    return response
 
 
 @app.get("/api/dashboard", response_model=DashboardResponse)
@@ -144,7 +173,8 @@ def hanpass_renewal_embed():
 
 
 @app.get("/embed/hanpass-renewal-admin", response_model=None)
-def hanpass_renewal_embed_admin():
+def hanpass_renewal_embed_admin(request: Request):
+    require_embed_admin(request)
     return HTMLResponse(render_admin_page())
 
 
@@ -169,3 +199,26 @@ def _collect_missing_today_snapshot() -> None:
         run_collection(settings)
     except Exception:
         pass
+
+
+def make_embed_admin_token() -> str:
+    expires_at = str(int(time.time()) + ADMIN_COOKIE_TTL_SECONDS)
+    signature = hmac.new(_embed_admin_secret(), expires_at.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{expires_at}:{signature}"
+
+
+def require_embed_admin(request: Request) -> None:
+    token = request.cookies.get(ADMIN_COOKIE_NAME, "")
+    try:
+        expires_at, signature = token.split(":", 1)
+        if int(expires_at) < int(time.time()):
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Admin password required") from None
+    expected = hmac.new(_embed_admin_secret(), expires_at.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=401, detail="Admin password required")
+
+
+def _embed_admin_secret() -> bytes:
+    return (settings.notion_token or settings.notion_database_id or ADMIN_PASSWORD).encode("utf-8")

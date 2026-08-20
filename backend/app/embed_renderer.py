@@ -51,6 +51,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         font-size: 14px;
       }}
       * {{ box-sizing: border-box; }}
+      [hidden] {{ display: none !important; }}
       body {{ margin: 0; background: #f6f8fa; }}
       .shell {{ width: min(100%, 1680px); margin: 0 auto; padding: 16px 24px 24px; }}
       .topbar {{ display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #d0d7de; }}
@@ -59,8 +60,17 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       h2 {{ font-size: 15px; }}
       .subtitle, .panel-meta, .chart-head span, .legend, .stamp {{ color: #57606a; font-size: 12px; }}
       .top-actions {{ display: flex; align-items: center; gap: 8px; }}
-      .action-link {{ display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 12px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; color: #24292f; font-size: 13px; font-weight: 750; text-decoration: none; }}
+      .action-link {{ display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 12px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; color: #24292f; font: inherit; font-size: 13px; font-weight: 750; text-decoration: none; cursor: pointer; }}
       .action-link.primary {{ border-color: #1f6feb; background: #1f6feb; color: #fff; }}
+      .modal-backdrop {{ position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; padding: 20px; background: rgb(31 35 40 / 46%); }}
+      .modal-backdrop.open {{ display: flex; }}
+      .modal {{ width: min(100%, 380px); padding: 18px; border: 1px solid #d0d7de; border-radius: 8px; background: #fff; box-shadow: 0 18px 48px rgb(31 35 40 / 24%); }}
+      .modal h2 {{ margin-bottom: 6px; font-size: 18px; }}
+      .modal p {{ color: #57606a; font-size: 13px; line-height: 1.5; }}
+      .modal label {{ display: block; margin-top: 14px; color: #57606a; font-size: 12px; font-weight: 750; }}
+      .modal input {{ width: 100%; height: 38px; margin-top: 6px; padding: 0 10px; border: 1px solid #d0d7de; border-radius: 6px; font: inherit; }}
+      .modal-actions {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }}
+      .modal-message {{ min-height: 18px; margin-top: 10px; color: #d1242f; font-size: 12px; }}
       .stamp {{ text-align: right; }}
       .summary {{ display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; margin: 14px 0; }}
       .card, .panel, .chart-panel {{ border: 1px solid #d0d7de; border-radius: 8px; background: #fff; }}
@@ -101,7 +111,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           <p class="subtitle">[Hanpass][앱개편], [Hanpass][앱개편][BO] 전용 Notion Embed</p>
         </div>
         <div class="top-actions">
-          <a class="action-link" href="/embed/hanpass-renewal-admin" target="_blank" rel="noreferrer">관리자 동기화</a>
+          <button id="admin-open" class="action-link" type="button" hidden>관리자 동기화</button>
           <a class="action-link primary" href="/embed/hanpass-renewal" target="_self">새로고침</a>
           <p id="stamp" class="stamp"></p>
         </div>
@@ -110,6 +120,19 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       <section id="versions" class="versions"></section>
       <section id="charts" class="charts"></section>
     </main>
+    <div id="admin-modal" class="modal-backdrop" aria-hidden="true">
+      <form id="admin-form" class="modal">
+        <h2>관리자 확인</h2>
+        <p>동기화 화면은 관리자 비밀번호 확인 후 열립니다.</p>
+        <label for="admin-password">비밀번호</label>
+        <input id="admin-password" type="password" autocomplete="current-password" />
+        <div id="admin-message" class="modal-message"></div>
+        <div class="modal-actions">
+          <button id="admin-cancel" class="action-link" type="button">취소</button>
+          <button class="action-link primary" type="submit">확인</button>
+        </div>
+      </form>
+    </div>
     <script id="snapshot-data" type="application/json">{escaped_payload}</script>
     <script>
       const DATA = JSON.parse(document.querySelector("#snapshot-data").textContent);
@@ -117,6 +140,14 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       const versions = document.querySelector("#versions");
       const charts = document.querySelector("#charts");
       const stamp = document.querySelector("#stamp");
+      const adminOpen = document.querySelector("#admin-open");
+      const adminModal = document.querySelector("#admin-modal");
+      const adminForm = document.querySelector("#admin-form");
+      const adminPassword = document.querySelector("#admin-password");
+      const adminCancel = document.querySelector("#admin-cancel");
+      const adminMessage = document.querySelector("#admin-message");
+      const adminVisible = new URLSearchParams(window.location.search).get("admin") === "1" || localStorage.getItem("hanpassEmbedAdmin") === "1";
+      adminOpen.hidden = !adminVisible;
 
       function render() {{
         const groups = DATA.groups || [];
@@ -378,6 +409,44 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       function escapeHtml(value) {{
         return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
       }}
+
+      function openAdminModal() {{
+        adminMessage.textContent = "";
+        adminPassword.value = "";
+        adminModal.classList.add("open");
+        adminModal.setAttribute("aria-hidden", "false");
+        setTimeout(() => adminPassword.focus(), 0);
+      }}
+
+      function closeAdminModal() {{
+        adminModal.classList.remove("open");
+        adminModal.setAttribute("aria-hidden", "true");
+      }}
+
+      adminOpen.addEventListener("click", openAdminModal);
+      adminCancel.addEventListener("click", closeAdminModal);
+      adminModal.addEventListener("click", (event) => {{
+        if (event.target === adminModal) closeAdminModal();
+      }});
+      adminForm.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        adminMessage.textContent = "확인 중입니다.";
+        try {{
+          const response = await fetch("/api/embed/hanpass-renewal/admin-login", {{
+            method: "POST",
+            headers: {{ "Content-Type": "application/json" }},
+            body: JSON.stringify({{ password: adminPassword.value }}),
+          }});
+          if (!response.ok) {{
+            adminMessage.textContent = "비밀번호가 맞지 않습니다.";
+            return;
+          }}
+          localStorage.setItem("hanpassEmbedAdmin", "1");
+          window.location.href = "/embed/hanpass-renewal-admin";
+        }} catch (error) {{
+          adminMessage.textContent = "관리자 확인에 실패했습니다.";
+        }}
+      }});
 
       render();
     </script>
