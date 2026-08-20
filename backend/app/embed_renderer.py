@@ -112,7 +112,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         </div>
         <div class="top-actions">
           <button id="admin-open" class="action-link" type="button" hidden>관리자 동기화</button>
-          <a class="action-link primary" href="/embed/hanpass-renewal" target="_self">새로고침</a>
+          <button id="refresh-page" class="action-link primary" type="button">새로고침</button>
           <p id="stamp" class="stamp"></p>
         </div>
       </header>
@@ -146,6 +146,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       const adminPassword = document.querySelector("#admin-password");
       const adminCancel = document.querySelector("#admin-cancel");
       const adminMessage = document.querySelector("#admin-message");
+      const refreshPage = document.querySelector("#refresh-page");
       const adminVisible = new URLSearchParams(window.location.search).get("admin") === "1" || localStorage.getItem("hanpassEmbedAdmin") === "1";
       adminOpen.hidden = !adminVisible;
 
@@ -446,6 +447,9 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         }} catch (error) {{
           adminMessage.textContent = "관리자 확인에 실패했습니다.";
         }}
+      }});
+      refreshPage.addEventListener("click", () => {{
+        window.location.reload();
       }});
 
       render();
