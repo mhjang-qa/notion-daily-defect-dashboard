@@ -2,7 +2,7 @@ services:
   - type: web
     name: notion-daily-defect-dashboard
     runtime: docker
-    plan: free
+    plan: starter
     dockerfilePath: ./Dockerfile
     envVars:
       - key: APP_TIMEZONE

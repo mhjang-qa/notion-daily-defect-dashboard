@@ -56,6 +56,8 @@ npm run dev
 
 이 저장소는 `render.yaml`과 `Dockerfile`을 포함합니다. Render에서 GitHub 저장소를 Blueprint 또는 Docker Web Service로 연결하면 프론트엔드를 빌드한 뒤 FastAPI가 같은 도메인에서 HTML과 API를 함께 제공합니다.
 
+SQLite Snapshot을 유지하려면 persistent disk가 필요합니다. Render persistent disk는 paid web service에서 지원되므로 `render.yaml`은 `starter` plan으로 설정되어 있습니다.
+
 Render 환경변수:
 
 ```env
