@@ -2,7 +2,7 @@ services:
   - type: web
     name: notion-daily-defect-dashboard
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     envVars:
       - key: APP_TIMEZONE
@@ -14,7 +14,7 @@ services:
       - key: SCHEDULER_MINUTE
         value: 30
       - key: DATABASE_URL
-        value: sqlite:////data/defects.db
+        value: sqlite:////tmp/defects.db
       - key: FRONTEND_DIST
         value: /app/frontend/dist
       - key: NOTION_VERSION
@@ -23,7 +23,3 @@ services:
         sync: false
       - key: NOTION_DATABASE_ID
         sync: false
-    disk:
-      name: defect-snapshot-data
-      mountPath: /data
-      sizeGB: 1

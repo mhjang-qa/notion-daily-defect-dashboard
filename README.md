@@ -52,11 +52,17 @@ npm run dev
 
 브라우저에서 `http://127.0.0.1:5173`으로 접속합니다.
 
-## Render 배포
+## Render 무료 배포
 
 이 저장소는 `render.yaml`과 `Dockerfile`을 포함합니다. Render에서 GitHub 저장소를 Blueprint 또는 Docker Web Service로 연결하면 프론트엔드를 빌드한 뒤 FastAPI가 같은 도메인에서 HTML과 API를 함께 제공합니다.
 
-SQLite Snapshot을 유지하려면 persistent disk가 필요합니다. Render persistent disk는 paid web service에서 지원되므로 `render.yaml`은 `starter` plan으로 설정되어 있습니다.
+현재 `render.yaml`은 무료 배포 우선 구성입니다.
+
+- `plan: free`
+- persistent disk 없음
+- SQLite DB는 `/tmp/defects.db` 사용
+
+Render Free 환경에서는 재시작, 스핀다운, 재배포 시 `/tmp/defects.db`가 유지되지 않을 수 있습니다. 장기 Snapshot 보존이 필요하면 GitHub Pages/정적 HTML 동기화 또는 외부 DB로 보완해야 합니다.
 
 Render 환경변수:
 
@@ -68,11 +74,15 @@ APP_TIMEZONE=Asia/Seoul
 SCHEDULER_ENABLED=true
 SCHEDULER_HOUR=8
 SCHEDULER_MINUTE=30
-DATABASE_URL=sqlite:////data/defects.db
+DATABASE_URL=sqlite:////tmp/defects.db
 FRONTEND_DIST=/app/frontend/dist
 ```
 
-`render.yaml`은 `/data` persistent disk를 사용하도록 구성되어 있습니다. SQLite Snapshot DB는 `/data/defects.db`에 저장되므로 서버 재시작 후에도 누적 데이터가 유지됩니다.
+무료 배포에서는 다음 값을 사용합니다.
+
+```env
+DATABASE_URL=sqlite:////tmp/defects.db
+```
 
 배포 후 접속 경로:
 
