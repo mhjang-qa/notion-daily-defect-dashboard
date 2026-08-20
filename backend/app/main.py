@@ -5,12 +5,13 @@ from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from .config import BACKEND_DIR, get_settings
+from .config import get_settings
 from .database import SessionLocal, get_session, init_db
+from .embed_renderer import GENERATED_EMBED_PATH, generate_hanpass_renewal_embed, render_admin_page
 from .notion_repository import NotionRepository
 from .scheduler import build_scheduler, collect_async, run_collection
 from .schemas import CollectResponse, DashboardResponse, SnapshotItemRow
@@ -72,7 +73,21 @@ async def target_versions(session: Session = Depends(get_session)) -> dict[str, 
 @app.post("/api/collect", response_model=CollectResponse)
 async def collect_now() -> CollectResponse:
     try:
-        return await collect_async(settings)
+        result = await collect_async(settings)
+        with SessionLocal() as session:
+            generate_hanpass_renewal_embed(session)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/embed/hanpass-renewal/sync")
+async def sync_hanpass_renewal_embed() -> dict[str, str | bool]:
+    try:
+        await collect_async(settings)
+        with SessionLocal() as session:
+            generated_path = generate_hanpass_renewal_embed(session)
+        return {"ok": True, "generated_path": str(generated_path)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -120,10 +135,17 @@ def index_head():
 @app.get("/embed/hanpass-renewal", response_model=None)
 @app.get("/embed/hanpass-renewal.html", response_model=None)
 def hanpass_renewal_embed():
-    embed_path = BACKEND_DIR / "static" / "embed" / "hanpass-renewal.html"
-    if embed_path.exists():
-        return FileResponse(embed_path)
+    if not GENERATED_EMBED_PATH.exists():
+        with SessionLocal() as session:
+            generate_hanpass_renewal_embed(session)
+    if GENERATED_EMBED_PATH.exists():
+        return FileResponse(GENERATED_EMBED_PATH)
     raise HTTPException(status_code=404, detail="Embed page not found")
+
+
+@app.get("/embed/hanpass-renewal-admin", response_model=None)
+def hanpass_renewal_embed_admin():
+    return HTMLResponse(render_admin_page())
 
 
 @app.get("/{full_path:path}", response_model=None)
