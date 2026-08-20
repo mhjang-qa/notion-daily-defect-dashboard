@@ -1,0 +1,154 @@
+:root {
+  color: #1f2328;
+  background: #f6f8fa;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+}
+
+.shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 28px;
+}
+
+.status-panel {
+  width: min(720px, 100%);
+  padding: 34px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(31, 35, 40, 0.08);
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #57606a;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.mark {
+  width: 14px;
+  height: 14px;
+  border: 3px solid #1f6feb;
+  border-radius: 50%;
+  border-right-color: #d1242f;
+}
+
+h1 {
+  margin: 18px 0 10px;
+  font-size: clamp(30px, 6vw, 48px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.lead {
+  max-width: 620px;
+  margin: 0;
+  color: #57606a;
+  line-height: 1.65;
+}
+
+.meter {
+  height: 10px;
+  margin: 26px 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eaeef2;
+}
+
+.meter span {
+  display: block;
+  width: 18%;
+  height: 100%;
+  border-radius: inherit;
+  background: #1f6feb;
+  transition: width 320ms ease;
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 0 0 24px;
+  overflow: hidden;
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  background: #d8dee4;
+}
+
+.readout div {
+  min-width: 0;
+  padding: 14px;
+  background: #fff;
+}
+
+dt {
+  color: #57606a;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+dd {
+  margin: 6px 0 0;
+  overflow: hidden;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+  color: #24292f;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button.primary {
+  border-color: #1f6feb;
+  background: #1f6feb;
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 16px;
+    place-items: stretch;
+  }
+
+  .status-panel {
+    align-self: center;
+    padding: 24px;
+  }
+
+  .readout {
+    grid-template-columns: 1fr;
+  }
+}

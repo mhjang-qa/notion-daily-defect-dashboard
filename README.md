@@ -90,6 +90,26 @@ DATABASE_URL=sqlite:////tmp/defects.db
 - `/api/health`: 서버 상태
 - `/api/collect`: 수동 Snapshot 수집
 
+## GitHub Pages 랜딩
+
+`docs/` 폴더는 Render Free cold start를 가리는 정적 랜딩 페이지입니다. GitHub Pages에서 Source를 `Deploy from a branch`, Branch를 `main`, Folder를 `/docs`로 설정하면 다음 흐름으로 동작합니다.
+
+1. GitHub Pages 랜딩 표시
+2. `https://notion-daily-defect-dashboard.onrender.com/api/health` 반복 확인
+3. 서버가 준비되면 Render 대시보드 URL로 자동 이동
+
+예상 Pages URL:
+
+```text
+https://mhjang-qa.github.io/notion-daily-defect-dashboard/
+```
+
+Render 환경변수 `CORS_ORIGINS`를 직접 설정한다면 GitHub Pages origin도 포함해야 합니다.
+
+```env
+CORS_ORIGINS=https://mhjang-qa.github.io,http://127.0.0.1:5173,http://localhost:5173
+```
+
 ## API
 
 - `GET /api/health`

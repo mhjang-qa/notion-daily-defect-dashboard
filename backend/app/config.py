@@ -39,7 +39,14 @@ class Settings(BaseModel):
     scheduler_hour: int = Field(default=8, alias="SCHEDULER_HOUR")
     scheduler_minute: int = Field(default=30, alias="SCHEDULER_MINUTE")
     timezone: str = Field(default="Asia/Seoul", alias="APP_TIMEZONE")
-    cors_origins: str = Field(default="http://127.0.0.1:5173,http://localhost:5173", alias="CORS_ORIGINS")
+    cors_origins: str = Field(
+        default=(
+            "http://127.0.0.1:5173,"
+            "http://localhost:5173,"
+            "https://mhjang-qa.github.io"
+        ),
+        alias="CORS_ORIGINS",
+    )
     frontend_dist: str = Field(default=str(ROOT_DIR / "frontend" / "dist"), alias="FRONTEND_DIST")
 
     @classmethod

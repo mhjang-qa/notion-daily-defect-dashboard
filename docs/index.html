@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Defect Trend Dashboard</title>
+    <meta
+      name="description"
+      content="Notion Daily Defect Dashboard Render 서버 준비 상태를 확인하고 대시보드로 이동합니다."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="status-panel" aria-live="polite">
+        <div class="brand-row">
+          <span class="mark" aria-hidden="true"></span>
+          <span>Notion Daily Defect Dashboard</span>
+        </div>
+        <h1>서버를 준비하고 있습니다</h1>
+        <p class="lead">
+          Render 무료 인스턴스가 절전 상태였다면 첫 접속에 시간이 걸릴 수 있습니다. 준비가 끝나면 자동으로 대시보드로 이동합니다.
+        </p>
+
+        <div class="meter" aria-hidden="true">
+          <span id="progressBar"></span>
+        </div>
+
+        <dl class="readout">
+          <div>
+            <dt>상태</dt>
+            <dd id="statusText">Render 서버 확인 중</dd>
+          </div>
+          <div>
+            <dt>최근 확인</dt>
+            <dd id="lastChecked">-</dd>
+          </div>
+          <div>
+            <dt>시도 횟수</dt>
+            <dd id="attemptCount">0</dd>
+          </div>
+        </dl>
+
+        <div class="actions">
+          <a id="openDashboard" class="button primary" href="https://notion-daily-defect-dashboard.onrender.com/">대시보드 열기</a>
+          <button id="retryButton" class="button" type="button">다시 확인</button>
+        </div>
+      </section>
+    </main>
+    <script src="./script.js"></script>
+  </body>
+</html>
