@@ -58,6 +58,9 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       h1 {{ font-size: 22px; line-height: 1.2; }}
       h2 {{ font-size: 15px; }}
       .subtitle, .panel-meta, .chart-head span, .legend, .stamp {{ color: #57606a; font-size: 12px; }}
+      .top-actions {{ display: flex; align-items: center; gap: 8px; }}
+      .action-link {{ display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 12px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; color: #24292f; font-size: 13px; font-weight: 750; text-decoration: none; }}
+      .action-link.primary {{ border-color: #1f6feb; background: #1f6feb; color: #fff; }}
       .stamp {{ text-align: right; }}
       .summary {{ display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; margin: 14px 0; }}
       .card, .panel, .chart-panel {{ border: 1px solid #d0d7de; border-radius: 8px; background: #fff; }}
@@ -84,7 +87,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       .legend {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }}
       .legend i {{ display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 50%; vertical-align: -1px; }}
       @media (max-width: 820px) {{
-        .topbar {{ display: grid; }}
+        .topbar, .top-actions {{ display: grid; justify-items: start; }}
         .versions, .charts {{ grid-template-columns: 1fr; }}
         .summary {{ grid-template-columns: repeat(2, minmax(120px, 1fr)); }}
       }}
@@ -97,7 +100,11 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           <h1>Hanpass 앱개편 결함 현황</h1>
           <p class="subtitle">[Hanpass][앱개편], [Hanpass][앱개편][BO] 전용 Notion Embed</p>
         </div>
-        <p id="stamp" class="stamp"></p>
+        <div class="top-actions">
+          <a class="action-link" href="/embed/hanpass-renewal-admin" target="_blank" rel="noreferrer">관리자 동기화</a>
+          <a class="action-link primary" href="/embed/hanpass-renewal" target="_self">새로고침</a>
+          <p id="stamp" class="stamp"></p>
+        </div>
       </header>
       <section id="summary" class="summary"></section>
       <section id="versions" class="versions"></section>
