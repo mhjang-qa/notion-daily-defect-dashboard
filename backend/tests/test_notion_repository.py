@@ -35,9 +35,14 @@ def test_in_progress_statuses_are_in_progress():
         "처리중 (In Progress)",
         "개발 완료 (Dev Done)",
         "결함 재발생 (Reopen)",
-        "QA 검증 -회귀 (QA Verification)",
     ):
         assert repo._status_group(status_prop(status, "In progress")) == "in_progress"
+
+
+def test_qa_verification_status_is_qa_verified():
+    repo = NotionRepository(get_settings())
+
+    assert repo._status_group(status_prop("QA 검증 -회귀 (QA Verification)", "In progress")) == "qa_verified"
 
 
 def test_todo_statuses_are_unresolved():

@@ -112,6 +112,7 @@ def extract_snapshot_payload(html: str) -> dict | None:
 def normalize_cumulative_rows(rows: list[dict]) -> list[dict]:
     normalized = [dict(row) for row in rows]
     for index, row in enumerate(normalized):
+        row["qa_verified_count"] = int(row.get("qa_verified_count") or 0)
         if index == 0:
             continue
         previous = normalized[index - 1]

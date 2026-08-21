@@ -152,8 +152,9 @@ class SnapshotService:
 
         resolved_ids = {record.notion_page_id for record in records if record.status_group == "resolved"}
         in_progress = sum(1 for record in records if record.status_group == "in_progress")
+        qa_verified = sum(1 for record in records if record.status_group == "qa_verified")
         resolved = len(resolved_ids)
-        unresolved = len(records) - resolved - in_progress
+        unresolved = len(records) - resolved - in_progress - qa_verified
         new_count = len(current_ids - seen_before)
         completed_today = len(resolved_ids - previous_latest_resolved_ids)
         reopened = sum(1 for record in records if record.notion_page_id in previous_resolved and record.status_group != "resolved")
@@ -162,6 +163,7 @@ class SnapshotService:
             "total_count": total,
             "new_count": new_count,
             "in_progress_count": in_progress,
+            "qa_verified_count": qa_verified,
             "unresolved_count": unresolved,
             "resolved_count": resolved,
             "reopened_count": reopened,

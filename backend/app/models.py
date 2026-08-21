@@ -20,6 +20,7 @@ class DefectSnapshot(Base):
     total_count: Mapped[int] = mapped_column(Integer, default=0)
     new_count: Mapped[int] = mapped_column(Integer, default=0)
     in_progress_count: Mapped[int] = mapped_column(Integer, default=0)
+    qa_verified_count: Mapped[int] = mapped_column(Integer, default=0)
     unresolved_count: Mapped[int] = mapped_column(Integer, default=0)
     resolved_count: Mapped[int] = mapped_column(Integer, default=0)
     reopened_count: Mapped[int] = mapped_column(Integer, default=0)

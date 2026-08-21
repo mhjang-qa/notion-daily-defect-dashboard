@@ -73,3 +73,26 @@ def test_same_date_snapshot_updates_without_duplicate():
     assert second.snapshots_updated == 1
     assert len(rows) == 1
     assert rows[0].total_count == 2
+
+
+def test_qa_verified_count_is_separate_from_progress_and_resolved():
+    session = make_session()
+    service = SnapshotService(session)
+    now = datetime(2026, 8, 20, 8, 30, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    service.collect(
+        [
+            record("a", "qa_verified"),
+            record("b", "in_progress"),
+            record("c", "resolved"),
+            record("d", "unresolved"),
+        ],
+        date(2026, 8, 20),
+        now,
+    )
+
+    row = service.dashboard_rows("5.25.0", None)[0]
+    assert row.qa_verified_count == 1
+    assert row.in_progress_count == 1
+    assert row.resolved_count == 1
+    assert row.unresolved_count == 1

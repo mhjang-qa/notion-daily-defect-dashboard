@@ -161,8 +161,9 @@ class NotionRepository:
             "처리중 (in progress)",
             "개발 완료 (dev done)",
             "결함 재발생 (reopen)",
-            "qa 검증 -회귀 (qa verification)",
         }
+        if text == "qa 검증 -회귀 (qa verification)":
+            return "qa_verified"
         if text in in_progress_statuses:
             return "in_progress"
         if prop.get("type") == "status":

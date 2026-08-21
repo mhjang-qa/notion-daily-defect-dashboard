@@ -74,14 +74,14 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       .modal-actions {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }}
       .modal-message {{ min-height: 18px; margin-top: 10px; color: #d1242f; font-size: 12px; }}
       .stamp {{ text-align: right; }}
-      .summary {{ display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; margin: 14px 0; }}
+      .summary {{ display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 8px; margin: 14px 0; }}
       .card, .panel, .chart-panel {{ border: 1px solid #d0d7de; border-radius: 8px; background: #fff; }}
       .card {{ padding: 12px; }}
       .card span {{ display: block; color: #57606a; font-size: 12px; font-weight: 750; }}
       .card strong {{ display: block; margin-top: 6px; font-size: 28px; line-height: 1; }}
       .versions {{ display: grid; grid-template-columns: repeat(2, minmax(520px, 1fr)); gap: 12px; }}
       .panel, .chart-panel {{ min-width: 0; padding: 14px; }}
-      .mini-kpis {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }}
+      .mini-kpis {{ display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 12px 0; }}
       .mini-kpis div {{ padding: 10px; border: 1px solid #d8dee4; border-radius: 6px; background: #f6f8fa; }}
       .mini-kpis span {{ color: #57606a; font-size: 11px; font-weight: 750; }}
       .mini-kpis strong {{ display: block; margin-top: 4px; font-size: 20px; }}
@@ -161,6 +161,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         const fresh = latestRows.reduce((sum, row) => sum + row.new_count, 0);
         const unresolved = latestRows.reduce((sum, row) => sum + row.unresolved_count, 0);
         const progress = latestRows.reduce((sum, row) => sum + row.in_progress_count, 0);
+        const qaVerified = latestRows.reduce((sum, row) => sum + (row.qa_verified_count || 0), 0);
         const resolved = latestRows.reduce((sum, row) => sum + row.resolved_count, 0);
         stamp.textContent = `Generated ${{formatDateTime(DATA.generatedAt)}}`;
         summary.innerHTML = [
@@ -168,6 +169,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           ["금일 신규", `+${{fresh}}`],
           ["미처리", unresolved],
           ["처리중", progress],
+          ["QA 확인 완료", qaVerified],
           ["완료", resolved],
         ].map(([label, value]) => `<article class="card"><span>${{label}}</span><strong>${{value}}</strong></article>`).join("");
         versions.innerHTML = groups.map(renderGroup).join("");
@@ -186,6 +188,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
             <td>+${{row.new_count}}</td>
             <td>${{row.unresolved_count}}</td>
             <td>${{row.in_progress_count}}</td>
+            <td>${{row.qa_verified_count || 0}}</td>
             <td>${{row.resolved_count}}</td>
             <td>${{Number(row.resolution_rate).toFixed(1)}}%</td>
           </tr>`).join("");
@@ -197,10 +200,12 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
               <div><span>전체</span><strong>${{latest.total_count}}</strong></div>
               <div><span>신규</span><strong>+${{latest.new_count}}</strong></div>
               <div><span>미처리</span><strong>${{latest.unresolved_count}}</strong></div>
+              <div><span>처리중</span><strong>${{latest.in_progress_count}}</strong></div>
+              <div><span>QA 확인 완료</span><strong>${{latest.qa_verified_count || 0}}</strong></div>
               <div><span>완료</span><strong>${{latest.resolved_count}}</strong></div>
             </div>
             <table>
-              <thead><tr><th>날짜</th><th>전체</th><th>신규</th><th>미처리</th><th>처리중</th><th>완료</th><th>처리율</th></tr></thead>
+              <thead><tr><th>날짜</th><th>전체</th><th>신규</th><th>미처리</th><th>처리중</th><th>QA 확인 완료</th><th>완료</th><th>처리율</th></tr></thead>
               <tbody>${{body}}</tbody>
             </table>
           </article>`;
@@ -215,6 +220,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
             new_count: 0,
             unresolved_count: 0,
             in_progress_count: 0,
+            qa_verified_count: 0,
             resolved_count: 0,
             completed_today_count: 0,
           }};
@@ -222,6 +228,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           current.new_count += row.new_count;
           current.unresolved_count += row.unresolved_count;
           current.in_progress_count += row.in_progress_count;
+          current.qa_verified_count += row.qa_verified_count || 0;
           current.resolved_count += row.resolved_count;
           current.completed_today_count += row.completed_today_count;
           byDate.set(row.snapshot_date, current);
@@ -235,7 +242,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           const item = {{ snapshot_date: date }};
           groups.forEach((group, groupIndex) => {{
             const row = group.rows.find((candidate) => candidate.snapshot_date === date) || {{}};
-            ["total_count", "new_count", "unresolved_count", "in_progress_count", "resolved_count", "completed_today_count"].forEach((key) => {{
+            ["total_count", "new_count", "unresolved_count", "in_progress_count", "qa_verified_count", "resolved_count", "completed_today_count"].forEach((key) => {{
               item[`g${{groupIndex}}_${{key}}`] = Number(row[key]) || 0;
             }});
           }});

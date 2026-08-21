@@ -25,6 +25,7 @@ class SnapshotRow(BaseModel):
     total_count: int
     new_count: int
     in_progress_count: int
+    qa_verified_count: int = 0
     unresolved_count: int
     resolved_count: int
     reopened_count: int
