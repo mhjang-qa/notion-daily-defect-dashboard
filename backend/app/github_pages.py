@@ -91,7 +91,7 @@ def merge_embed_html_snapshots(existing_html: str, fresh_html: str) -> str:
         merged_groups.append(
             {
                 "version": version,
-                "rows": [rows_by_date[key] for key in sorted(rows_by_date)],
+                "rows": normalize_cumulative_rows([rows_by_date[key] for key in sorted(rows_by_date)]),
             }
         )
 
@@ -107,3 +107,14 @@ def extract_snapshot_payload(html: str) -> dict | None:
         return json.loads(match.group(1))
     except json.JSONDecodeError:
         return None
+
+
+def normalize_cumulative_rows(rows: list[dict]) -> list[dict]:
+    normalized = [dict(row) for row in rows]
+    for index, row in enumerate(normalized):
+        if index == 0:
+            continue
+        previous = normalized[index - 1]
+        row["new_count"] = max(0, int(row.get("total_count") or 0) - int(previous.get("total_count") or 0))
+        row["net_change_count"] = int(row.get("total_count") or 0) - int(previous.get("total_count") or 0)
+    return normalized
