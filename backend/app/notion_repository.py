@@ -147,7 +147,11 @@ class NotionRepository:
         if not prop:
             return "unresolved"
         text = self._property_to_text(prop).lower()
-        if "qa 검증" in text and "회귀" in text:
+        resolved_statuses = {
+            "qa 검증 -회귀 (qa verification)",
+            "완료 (done)",
+        }
+        if text in resolved_statuses:
             return "resolved"
         if prop.get("type") == "status":
             status = prop.get("status") or {}

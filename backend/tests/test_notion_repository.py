@@ -14,10 +14,12 @@ def status_prop(name: str, group: str = "") -> dict:
     }
 
 
-def test_only_qa_regression_status_is_resolved():
+def test_only_final_qa_statuses_are_resolved():
     repo = NotionRepository(get_settings())
 
-    assert repo._status_group(status_prop("QA 검증 -회귀", "Complete")) == "resolved"
+    assert repo._status_group(status_prop("QA 검증 -회귀 (QA Verification)", "Complete")) == "resolved"
+    assert repo._status_group(status_prop("완료 (Done)", "Complete")) == "resolved"
+    assert repo._status_group(status_prop("QA 검증 -회귀", "Complete")) == "unresolved"
     assert repo._status_group(status_prop("개발 완료", "Complete")) == "unresolved"
     assert repo._status_group(status_prop("완료", "Complete")) == "unresolved"
 
