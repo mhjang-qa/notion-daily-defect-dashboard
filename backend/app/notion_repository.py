@@ -146,18 +146,15 @@ class NotionRepository:
     def _status_group(self, prop: dict[str, Any] | None) -> str:
         if not prop:
             return "unresolved"
+        text = self._property_to_text(prop).lower()
+        if "qa 검증" in text and "회귀" in text:
+            return "resolved"
         if prop.get("type") == "status":
             status = prop.get("status") or {}
             group = (status.get("group") or {}).get("name", "").lower()
-            if "complete" in group or "done" in group:
-                return "resolved"
             if "progress" in group:
                 return "in_progress"
-        text = self._property_to_text(prop).lower()
-        resolved_keywords = ("done", "complete", "resolved", "closed", "fixed", "완료", "종료", "해결")
         progress_keywords = ("progress", "doing", "처리중", "진행", "개발중", "수정중")
-        if any(keyword in text for keyword in resolved_keywords):
-            return "resolved"
         if any(keyword in text for keyword in progress_keywords):
             return "in_progress"
         return "unresolved"
