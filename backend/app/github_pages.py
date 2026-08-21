@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import base64
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
 from .config import Settings
+from .embed_renderer import render_hanpass_renewal_embed
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,9 @@ async def publish_embed_html_to_github_pages(settings: Settings, html_path: Path
         current = await client.get(api_url, params={"ref": settings.github_pages_branch})
         current.raise_for_status()
         current_data = current.json()
+        current_content = base64.b64decode(current_data["content"]).decode("utf-8")
+        content = merge_embed_html_snapshots(current_content, content)
+        html_path.write_text(content, encoding="utf-8")
         payload = {
             "message": "Update defect dashboard snapshot",
             "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
@@ -51,3 +57,53 @@ async def publish_embed_html_to_github_pages(settings: Settings, html_path: Path
         commit_sha=updated_data["commit"]["sha"],
         content_sha=updated_data["content"]["sha"],
     )
+
+
+SNAPSHOT_DATA_RE = re.compile(
+    r'<script id="snapshot-data" type="application/json">(.*?)</script>',
+    re.DOTALL,
+)
+
+
+def merge_embed_html_snapshots(existing_html: str, fresh_html: str) -> str:
+    existing = extract_snapshot_payload(existing_html)
+    fresh = extract_snapshot_payload(fresh_html)
+    if not existing or not fresh:
+        return fresh_html
+
+    versions = []
+    for group in [*existing.get("groups", []), *fresh.get("groups", [])]:
+        version = group.get("version")
+        if version and version not in versions:
+            versions.append(version)
+
+    merged_groups = []
+    for version in versions:
+        rows_by_date = {}
+        for payload in (existing, fresh):
+            for group in payload.get("groups", []):
+                if group.get("version") != version:
+                    continue
+                for row in group.get("rows", []):
+                    snapshot_date = row.get("snapshot_date")
+                    if snapshot_date:
+                        rows_by_date[snapshot_date] = row
+        merged_groups.append(
+            {
+                "version": version,
+                "rows": [rows_by_date[key] for key in sorted(rows_by_date)],
+            }
+        )
+
+    generated_at = fresh.get("generatedAt") or existing.get("generatedAt") or ""
+    return render_hanpass_renewal_embed(merged_groups, generated_at)
+
+
+def extract_snapshot_payload(html: str) -> dict | None:
+    match = SNAPSHOT_DATA_RE.search(html)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
