@@ -76,6 +76,13 @@ SCHEDULER_HOUR=8
 SCHEDULER_MINUTE=30
 DATABASE_URL=sqlite:////tmp/defects.db
 FRONTEND_DIST=/app/frontend/dist
+RENDER_PUBLIC_ORIGIN=https://notion-daily-defect-dashboard.onrender.com
+GITHUB_PAGES_OWNER=mhjang-qa
+GITHUB_PAGES_REPO=Automated-Report-Generation-
+GITHUB_PAGES_BRANCH=main
+GITHUB_PAGES_PATH=docs/defect-dashboard/hanpass-renewal.html
+GITHUB_PAGES_URL=https://mhjang-qa.github.io/Automated-Report-Generation-/defect-dashboard/hanpass-renewal.html
+GITHUB_PAGES_TOKEN=github_pat_xxx
 ```
 
 무료 배포에서는 다음 값을 사용합니다.
@@ -90,8 +97,8 @@ DATABASE_URL=sqlite:////tmp/defects.db
 - `/api/health`: 서버 상태
 - `/api/collect`: 수동 Snapshot 수집
 - `/embed/hanpass-renewal`: `[Hanpass][앱개편]`, `[Hanpass][앱개편][BO]` 전용 Notion Embed 정적 HTML
-- `/embed/hanpass-renewal-admin`: Notion 수집 후 Embed 정적 HTML을 재생성하는 관리자 페이지
-- `/api/embed/hanpass-renewal/sync`: 관리자 동기화 API
+- `/embed/hanpass-renewal-admin`: Notion 수집 후 Embed 정적 HTML을 재생성하고 GitHub Pages에 반영하는 관리자 페이지
+- `/api/embed/hanpass-renewal/sync`: 관리자 동기화 API. `GITHUB_PAGES_TOKEN`이 설정되어 있으면 GitHub Pages HTML 파일까지 commit 업데이트합니다.
 
 ## GitHub Pages 랜딩
 

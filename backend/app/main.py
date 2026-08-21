@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .database import SessionLocal, get_session, init_db
 from .embed_renderer import GENERATED_EMBED_PATH, generate_hanpass_renewal_embed, render_admin_page
+from .github_pages import publish_embed_html_to_github_pages
 from .notion_repository import NotionRepository
 from .scheduler import build_scheduler, collect_async, run_collection
 from .schemas import CollectResponse, DashboardResponse, SnapshotItemRow
@@ -99,7 +100,15 @@ async def sync_hanpass_renewal_embed(request: Request) -> dict[str, str | bool]:
         await collect_async(settings)
         with SessionLocal() as session:
             generated_path = generate_hanpass_renewal_embed(session)
-        return {"ok": True, "generated_path": str(generated_path)}
+        publish_result = await publish_embed_html_to_github_pages(settings, generated_path)
+        return {
+            "ok": True,
+            "generated_path": str(generated_path),
+            "pages_url": settings.github_pages_url,
+            "github_html_url": publish_result.html_url,
+            "commit_sha": publish_result.commit_sha,
+            "content_sha": publish_result.content_sha,
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -109,13 +118,14 @@ def login_hanpass_renewal_embed_admin(payload: AdminLoginRequest, request: Reque
     if not hmac.compare_digest(payload.password, ADMIN_PASSWORD):
         raise HTTPException(status_code=401, detail="Invalid password")
     response = JSONResponse({"ok": True})
+    is_cross_origin = bool(request.headers.get("origin"))
     response.set_cookie(
         ADMIN_COOKIE_NAME,
         make_embed_admin_token(),
         max_age=ADMIN_COOKIE_TTL_SECONDS,
         httponly=True,
-        secure=request.url.scheme == "https",
-        samesite="lax",
+        secure=is_cross_origin or request.url.scheme == "https",
+        samesite="none" if is_cross_origin else "lax",
         path="/",
     )
     return response

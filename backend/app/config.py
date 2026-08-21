@@ -49,10 +49,28 @@ class Settings(BaseModel):
         alias="CORS_ORIGINS",
     )
     frontend_dist: str = Field(default=str(ROOT_DIR / "frontend" / "dist"), alias="FRONTEND_DIST")
+    render_public_origin: str = Field(
+        default="https://notion-daily-defect-dashboard.onrender.com",
+        alias="RENDER_PUBLIC_ORIGIN",
+    )
+    github_pages_token: str = Field(default="", alias="GITHUB_PAGES_TOKEN")
+    github_pages_owner: str = Field(default="mhjang-qa", alias="GITHUB_PAGES_OWNER")
+    github_pages_repo: str = Field(default="Automated-Report-Generation-", alias="GITHUB_PAGES_REPO")
+    github_pages_branch: str = Field(default="main", alias="GITHUB_PAGES_BRANCH")
+    github_pages_path: str = Field(
+        default="docs/defect-dashboard/hanpass-renewal.html",
+        alias="GITHUB_PAGES_PATH",
+    )
+    github_pages_url: str = Field(
+        default="https://mhjang-qa.github.io/Automated-Report-Generation-/defect-dashboard/hanpass-renewal.html",
+        alias="GITHUB_PAGES_URL",
+    )
 
     @classmethod
     def from_env(cls) -> "Settings":
         values = {field.alias: os.environ.get(field.alias, field.default) for field in cls.model_fields.values()}
+        if not values["GITHUB_PAGES_TOKEN"]:
+            values["GITHUB_PAGES_TOKEN"] = os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_PAT") or ""
         values["SCHEDULER_ENABLED"] = str(values["SCHEDULER_ENABLED"]).lower() not in {"0", "false", "no", "off"}
         values["SCHEDULER_HOUR"] = int(values["SCHEDULER_HOUR"])
         values["SCHEDULER_MINUTE"] = int(values["SCHEDULER_MINUTE"])

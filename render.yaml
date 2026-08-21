@@ -23,3 +23,17 @@ services:
         sync: false
       - key: NOTION_DATABASE_ID
         sync: false
+      - key: RENDER_PUBLIC_ORIGIN
+        value: https://notion-daily-defect-dashboard.onrender.com
+      - key: GITHUB_PAGES_OWNER
+        value: mhjang-qa
+      - key: GITHUB_PAGES_REPO
+        value: Automated-Report-Generation-
+      - key: GITHUB_PAGES_BRANCH
+        value: main
+      - key: GITHUB_PAGES_PATH
+        value: docs/defect-dashboard/hanpass-renewal.html
+      - key: GITHUB_PAGES_URL
+        value: https://mhjang-qa.github.io/Automated-Report-Generation-/defect-dashboard/hanpass-renewal.html
+      - key: GITHUB_PAGES_TOKEN
+        sync: false

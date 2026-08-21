@@ -35,8 +35,10 @@ def generate_hanpass_renewal_embed(session: Session) -> Path:
 
 
 def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
+    settings = get_settings()
     payload = json.dumps({"groups": groups, "generatedAt": generated_at}, ensure_ascii=False)
     escaped_payload = payload.replace("</", "<\\/")
+    render_origin = settings.render_public_origin.rstrip("/")
     return f"""<!doctype html>
 <html lang="ko">
   <head>
@@ -141,6 +143,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       const versions = document.querySelector("#versions");
       const charts = document.querySelector("#charts");
       const stamp = document.querySelector("#stamp");
+      const ADMIN_ORIGIN = "{html.escape(render_origin)}";
       const adminOpen = document.querySelector("#admin-open");
       const adminModal = document.querySelector("#admin-modal");
       const adminForm = document.querySelector("#admin-form");
@@ -435,8 +438,9 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         event.preventDefault();
         adminMessage.textContent = "확인 중입니다.";
         try {{
-          const response = await fetch("/api/embed/hanpass-renewal/admin-login", {{
+          const response = await fetch(`${{ADMIN_ORIGIN}}/api/embed/hanpass-renewal/admin-login`, {{
             method: "POST",
+            credentials: "include",
             headers: {{ "Content-Type": "application/json" }},
             body: JSON.stringify({{ password: adminPassword.value }}),
           }});
@@ -445,7 +449,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
             return;
           }}
           localStorage.setItem("hanpassEmbedAdmin", "1");
-          window.location.href = "/embed/hanpass-renewal-admin";
+          window.location.href = `${{ADMIN_ORIGIN}}/embed/hanpass-renewal-admin`;
         }} catch (error) {{
           adminMessage.textContent = "관리자 확인에 실패했습니다.";
         }}
@@ -457,8 +461,10 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
 
 
 def render_admin_page() -> str:
+    settings = get_settings()
     embed_url = "/embed/hanpass-renewal"
     sync_url = "/api/embed/hanpass-renewal/sync"
+    pages_url = settings.github_pages_url
     return f"""<!doctype html>
 <html lang="ko">
   <head>
@@ -480,9 +486,10 @@ def render_admin_page() -> str:
   <body>
     <main>
       <h1>Hanpass 앱개편 임베드 동기화</h1>
-      <p>Notion 데이터를 수집한 뒤, Notion embed 주소 <code>{html.escape(embed_url)}</code>에 표시될 정적 HTML Snapshot을 재생성합니다.</p>
-      <button id="sync" class="primary" type="button">동기화 후 HTML 재생성</button>
+      <p>Notion 데이터를 수집한 뒤 정적 HTML Snapshot을 재생성하고, GitHub Pages HTML 파일까지 업데이트합니다.</p>
+      <button id="sync" class="primary" type="button">동기화 후 GitHub Pages 갱신</button>
       <a href="{html.escape(embed_url)}" target="_blank" rel="noreferrer">임베드 HTML 열기</a>
+      <a href="{html.escape(pages_url)}" target="_blank" rel="noreferrer">GitHub Pages 열기</a>
       <div id="message">대기 중</div>
     </main>
     <script>
@@ -490,12 +497,12 @@ def render_admin_page() -> str:
       const message = document.querySelector("#message");
       button.addEventListener("click", async () => {{
         button.disabled = true;
-        message.textContent = "Notion 수집 및 정적 HTML 생성 중입니다.";
+        message.textContent = "Notion 수집, 정적 HTML 생성, GitHub Pages 업데이트 중입니다.";
         try {{
           const response = await fetch("{sync_url}", {{ method: "POST" }});
           const data = await response.json().catch(() => ({{}}));
           if (!response.ok || !data.ok) throw new Error(data.detail || data.message || `HTTP ${{response.status}}`);
-          message.textContent = `완료: ${{data.generated_path}}`;
+          message.innerHTML = `완료: GitHub Pages 업데이트됨<br><a href="${{data.pages_url || "{html.escape(pages_url)}"}}" target="_blank" rel="noreferrer">업데이트된 페이지 열기</a><br><small>commit: ${{data.commit_sha || "-"}}</small>`;
         }} catch (error) {{
           message.textContent = error.message || "동기화 실패";
         }} finally {{
