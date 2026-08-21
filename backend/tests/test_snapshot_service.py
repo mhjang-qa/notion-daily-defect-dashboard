@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base
+from app.models import Base, DefectSnapshot
 from app.schemas import DefectRecord
 from app.snapshot_service import SnapshotService
 
@@ -96,3 +96,30 @@ def test_qa_verified_count_is_separate_from_progress_and_resolved():
     assert row.in_progress_count == 1
     assert row.resolved_count == 1
     assert row.unresolved_count == 1
+
+
+def test_collect_recovers_when_snapshot_is_created_between_lookup_and_insert():
+    session = make_session()
+    service = SnapshotService(session)
+    now = datetime(2026, 8, 21, 8, 30, tzinfo=ZoneInfo("Asia/Seoul"))
+    session.add(DefectSnapshot(snapshot_date=date(2026, 8, 21), target_version="5.25.0", collected_at=now))
+    session.commit()
+
+    original_lookup = service._snapshot_for_date
+    first_lookup = True
+
+    def stale_lookup(snapshot_date, target_version):
+        nonlocal first_lookup
+        if first_lookup:
+            first_lookup = False
+            return None
+        return original_lookup(snapshot_date, target_version)
+
+    service._snapshot_for_date = stale_lookup
+    result = service.collect([record("a", "unresolved")], date(2026, 8, 21), now)
+    rows = service.dashboard_rows("5.25.0", None)
+
+    assert result.snapshots_created == 0
+    assert result.snapshots_updated == 1
+    assert len(rows) == 1
+    assert rows[0].total_count == 1

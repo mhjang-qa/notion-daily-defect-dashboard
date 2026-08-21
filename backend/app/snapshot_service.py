@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import Select, delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from .models import DefectSnapshot, DefectSnapshotItem
@@ -23,16 +24,12 @@ class SnapshotService:
         updated = 0
         item_count = 0
         for target_version, version_records in grouped.items():
-            existing = self._snapshot_for_date(snapshot_date, target_version)
-            if existing:
-                snapshot = existing
+            snapshot, was_created = self._get_or_create_snapshot(snapshot_date, target_version, collected_at)
+            if was_created:
+                created += 1
+            else:
                 self.session.execute(delete(DefectSnapshotItem).where(DefectSnapshotItem.snapshot_id == snapshot.id))
                 updated += 1
-            else:
-                snapshot = DefectSnapshot(snapshot_date=snapshot_date, target_version=target_version, collected_at=collected_at)
-                self.session.add(snapshot)
-                self.session.flush()
-                created += 1
 
             stats = self._build_stats(version_records, snapshot_date, target_version)
             for key, value in stats.items():
@@ -40,8 +37,8 @@ class SnapshotService:
             snapshot.collected_at = collected_at
             snapshot.items = [self._record_to_item(snapshot.id, record) for record in version_records]
             item_count += len(version_records)
+            self.session.commit()
 
-        self.session.commit()
         return CollectResponse(
             snapshot_date=snapshot_date,
             target_versions=sorted(grouped),
@@ -179,6 +176,23 @@ class SnapshotService:
                 DefectSnapshot.target_version == target_version,
             )
         )
+
+    def _get_or_create_snapshot(self, snapshot_date: date, target_version: str, collected_at: datetime) -> tuple[DefectSnapshot, bool]:
+        existing = self._snapshot_for_date(snapshot_date, target_version)
+        if existing:
+            return existing, False
+
+        snapshot = DefectSnapshot(snapshot_date=snapshot_date, target_version=target_version, collected_at=collected_at)
+        self.session.add(snapshot)
+        try:
+            self.session.flush()
+            return snapshot, True
+        except IntegrityError:
+            self.session.rollback()
+            existing = self._snapshot_for_date(snapshot_date, target_version)
+            if not existing:
+                raise
+            return existing, False
 
     def _record_to_item(self, snapshot_id: int, record: DefectRecord) -> DefectSnapshotItem:
         return DefectSnapshotItem(
