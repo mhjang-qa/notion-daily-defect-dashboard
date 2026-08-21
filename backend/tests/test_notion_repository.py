@@ -20,7 +20,6 @@ def test_only_final_qa_statuses_are_resolved():
     assert repo._status_group(status_prop("QA 검증 -회귀 (QA Verification)", "Complete")) == "resolved"
     assert repo._status_group(status_prop("완료 (Done)", "Complete")) == "resolved"
     assert repo._status_group(status_prop("QA 검증 -회귀", "Complete")) == "unresolved"
-    assert repo._status_group(status_prop("개발 완료", "Complete")) == "unresolved"
     assert repo._status_group(status_prop("완료", "Complete")) == "unresolved"
 
 
@@ -28,3 +27,4 @@ def test_progress_status_is_still_in_progress():
     repo = NotionRepository(get_settings())
 
     assert repo._status_group(status_prop("수정중", "In progress")) == "in_progress"
+    assert repo._status_group(status_prop("개발 완료", "Complete")) == "in_progress"

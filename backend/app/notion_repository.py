@@ -158,7 +158,7 @@ class NotionRepository:
             group = (status.get("group") or {}).get("name", "").lower()
             if "progress" in group:
                 return "in_progress"
-        progress_keywords = ("progress", "doing", "처리중", "진행", "개발중", "수정중")
+        progress_keywords = ("progress", "doing", "처리중", "진행", "개발중", "개발 완료", "수정중")
         if any(keyword in text for keyword in progress_keywords):
             return "in_progress"
         return "unresolved"
