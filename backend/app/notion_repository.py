@@ -148,17 +148,29 @@ class NotionRepository:
             return "unresolved"
         text = self._property_to_text(prop).lower()
         resolved_statuses = {
-            "qa 검증 -회귀 (qa verification)",
+            "known-issue",
+            "추적 관찰-백로그",
+            "결함 아님 (not an issue)",
+            "추후 수정 백로그 이관",
             "완료 (done)",
         }
         if text in resolved_statuses:
             return "resolved"
+        in_progress_statuses = {
+            "기획서 수정",
+            "처리중 (in progress)",
+            "개발 완료 (dev done)",
+            "결함 재발생 (reopen)",
+            "qa 검증 -회귀 (qa verification)",
+        }
+        if text in in_progress_statuses:
+            return "in_progress"
         if prop.get("type") == "status":
             status = prop.get("status") or {}
             group = (status.get("group") or {}).get("name", "").lower()
             if "progress" in group:
                 return "in_progress"
-        progress_keywords = ("progress", "doing", "처리중", "진행", "개발중", "개발 완료", "수정중")
+        progress_keywords = ("progress", "doing", "처리중", "진행", "개발중", "수정중")
         if any(keyword in text for keyword in progress_keywords):
             return "in_progress"
         return "unresolved"
