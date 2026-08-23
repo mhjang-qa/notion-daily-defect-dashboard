@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .schemas import SnapshotItemRow
 from .snapshot_service import SnapshotService
 
 
@@ -28,7 +29,7 @@ def generate_hanpass_renewal_embed(session: Session) -> Path:
             {
                 "version": version,
                 "rows": [row.model_dump(mode="json") for row in rows],
-                "items": [item.model_dump(mode="json") for item in items],
+                "items": [SnapshotItemRow.model_validate(item).model_dump(mode="json") for item in items],
             }
         )
     generated_at = datetime.now(settings.tz).isoformat()
