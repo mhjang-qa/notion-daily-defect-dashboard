@@ -17,13 +17,19 @@ def make_session():
     return sessionmaker(bind=engine, expire_on_commit=False)()
 
 
-def record(page_id: str, status_group: str, target_version: str = "5.25.0") -> DefectRecord:
+def record(
+    page_id: str,
+    status_group: str,
+    target_version: str = "5.25.0",
+    notion_created_at: datetime | None = None,
+) -> DefectRecord:
     return DefectRecord(
         notion_page_id=page_id,
         title=f"Defect {page_id}",
         status=status_group,
         status_group=status_group,
         target_version=target_version,
+        notion_created_at=notion_created_at,
     )
 
 
@@ -45,6 +51,26 @@ def test_new_count_is_first_seen_not_total_delta():
     assert rows[1].total_count == 3
     assert rows[1].completed_today_count == 1
     assert rows[1].net_change_count == 0
+
+
+def test_new_count_uses_notion_created_date():
+    session = make_session()
+    service = SnapshotService(session)
+    tz = ZoneInfo("Asia/Seoul")
+    now = datetime(2026, 8, 21, 8, 30, tzinfo=tz)
+
+    service.collect(
+        [
+            record("a", "unresolved", notion_created_at=datetime(2026, 8, 20, 23, 0, tzinfo=tz)),
+            record("b", "unresolved", notion_created_at=datetime(2026, 8, 21, 1, 0, tzinfo=tz)),
+        ],
+        date(2026, 8, 21),
+        now,
+    )
+
+    row = service.dashboard_rows("5.25.0", None)[0]
+    assert row.total_count == 2
+    assert row.new_count == 1
 
 
 def test_reopened_count_detects_previous_resolved_item():

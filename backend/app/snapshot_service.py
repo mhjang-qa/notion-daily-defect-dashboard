@@ -31,7 +31,7 @@ class SnapshotService:
                 self.session.execute(delete(DefectSnapshotItem).where(DefectSnapshotItem.snapshot_id == snapshot.id))
                 updated += 1
 
-            stats = self._build_stats(version_records, snapshot_date, target_version)
+            stats = self._build_stats(version_records, snapshot_date, target_version, collected_at)
             for key, value in stats.items():
                 setattr(snapshot, key, value)
             snapshot.collected_at = collected_at
@@ -104,7 +104,13 @@ class SnapshotService:
         )
         return snapshot.items if snapshot else []
 
-    def _build_stats(self, records: list[DefectRecord], snapshot_date: date, target_version: str) -> dict[str, int | float]:
+    def _build_stats(
+        self,
+        records: list[DefectRecord],
+        snapshot_date: date,
+        target_version: str,
+        collected_at: datetime,
+    ) -> dict[str, int | float]:
         current_ids = {record.notion_page_id for record in records}
         seen_before = set(
             self.session.scalars(
@@ -152,7 +158,7 @@ class SnapshotService:
         qa_verified = sum(1 for record in records if record.status_group == "qa_verified")
         resolved = len(resolved_ids)
         unresolved = len(records) - resolved - in_progress - qa_verified
-        new_count = len(current_ids - seen_before)
+        new_count = self._created_on_snapshot_date_count(records, snapshot_date, collected_at, seen_before)
         completed_today = len(resolved_ids - previous_latest_resolved_ids)
         reopened = sum(1 for record in records if record.notion_page_id in previous_resolved and record.status_group != "resolved")
         total = len(records)
@@ -208,3 +214,24 @@ class SnapshotService:
             notion_last_edited_at=record.notion_last_edited_at,
             url=record.url,
         )
+
+    @staticmethod
+    def _created_on_snapshot_date_count(
+        records: list[DefectRecord],
+        snapshot_date: date,
+        collected_at: datetime,
+        seen_before: set[str],
+    ) -> int:
+        count = 0
+        unknown_created_ids: set[str] = set()
+        target_tz = collected_at.tzinfo if collected_at.tzinfo and collected_at.utcoffset() is not None else None
+        for record in records:
+            if not record.notion_created_at:
+                unknown_created_ids.add(record.notion_page_id)
+                continue
+            created_at = record.notion_created_at
+            if target_tz and created_at.tzinfo and created_at.utcoffset() is not None:
+                created_at = created_at.astimezone(target_tz)
+            if created_at.date() == snapshot_date:
+                count += 1
+        return count + len(unknown_created_ids - seen_before)

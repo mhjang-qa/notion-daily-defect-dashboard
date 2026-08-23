@@ -118,11 +118,6 @@ def extract_snapshot_payload(html: str) -> dict | None:
 
 def normalize_cumulative_rows(rows: list[dict]) -> list[dict]:
     normalized = [dict(row) for row in rows]
-    for index, row in enumerate(normalized):
+    for row in normalized:
         row["qa_verified_count"] = int(row.get("qa_verified_count") or 0)
-        if index == 0:
-            continue
-        previous = normalized[index - 1]
-        row["new_count"] = max(0, int(row.get("total_count") or 0) - int(previous.get("total_count") or 0))
-        row["net_change_count"] = int(row.get("total_count") or 0) - int(previous.get("total_count") or 0)
     return normalized
