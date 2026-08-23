@@ -87,6 +87,9 @@ def test_generate_embed_serializes_snapshot_items(monkeypatch, tmp_path):
         def snapshot_items(self, snapshot_id):
             return [Item()]
 
+        def first_status_dates(self, version, notion_page_ids):
+            return {"page-1": {"resolved": "2026-08-21"}}
+
     output = tmp_path / "embed.html"
     monkeypatch.setattr("app.embed_renderer.GENERATED_EMBED_PATH", output)
     monkeypatch.setattr("app.embed_renderer.SnapshotService", Service)
@@ -95,3 +98,4 @@ def test_generate_embed_serializes_snapshot_items(monkeypatch, tmp_path):
     payload = extract_snapshot_payload(output.read_text(encoding="utf-8"))
 
     assert payload["groups"][0]["items"][0]["title"] == "로그인 오류"
+    assert payload["groups"][0]["items"][0]["resolved_first_seen_date"] == "2026-08-21"

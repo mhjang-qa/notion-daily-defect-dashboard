@@ -104,6 +104,33 @@ class SnapshotService:
         )
         return snapshot.items if snapshot else []
 
+    def first_status_dates(
+        self,
+        target_version: str,
+        notion_page_ids: list[str],
+        status_groups: tuple[str, ...] = ("qa_verified", "resolved"),
+    ) -> dict[str, dict[str, str]]:
+        if not notion_page_ids:
+            return {}
+        rows = self.session.execute(
+            select(
+                DefectSnapshotItem.notion_page_id,
+                DefectSnapshotItem.status_group,
+                func.min(DefectSnapshot.snapshot_date),
+            )
+            .join(DefectSnapshot)
+            .where(
+                DefectSnapshot.target_version == target_version,
+                DefectSnapshotItem.notion_page_id.in_(notion_page_ids),
+                DefectSnapshotItem.status_group.in_(status_groups),
+            )
+            .group_by(DefectSnapshotItem.notion_page_id, DefectSnapshotItem.status_group)
+        ).all()
+        result: dict[str, dict[str, str]] = defaultdict(dict)
+        for notion_page_id, status_group, first_date in rows:
+            result[notion_page_id][status_group] = first_date.isoformat()
+        return dict(result)
+
     def _build_stats(
         self,
         records: list[DefectRecord],

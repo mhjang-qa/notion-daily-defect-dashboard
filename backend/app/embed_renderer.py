@@ -25,11 +25,19 @@ def generate_hanpass_renewal_embed(session: Session) -> Path:
         rows = service.dashboard_rows(version, None)
         latest = rows[-1] if rows else None
         items = service.snapshot_items(latest.id) if latest else []
+        first_status_dates = service.first_status_dates(version, [item.notion_page_id for item in items])
         groups.append(
             {
                 "version": version,
                 "rows": [row.model_dump(mode="json") for row in rows],
-                "items": [SnapshotItemRow.model_validate(item).model_dump(mode="json") for item in items],
+                "items": [
+                    {
+                        **SnapshotItemRow.model_validate(item).model_dump(mode="json"),
+                        "qa_verified_first_seen_date": first_status_dates.get(item.notion_page_id, {}).get("qa_verified", ""),
+                        "resolved_first_seen_date": first_status_dates.get(item.notion_page_id, {}).get("resolved", ""),
+                    }
+                    for item in items
+                ],
             }
         )
     generated_at = datetime.now(settings.tz).isoformat()
@@ -259,9 +267,11 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           preparedGroups.forEach((group, groupIndex) => {{
             const exact = group.displayRows.find((candidate) => candidate.snapshot_date === date);
             const carry = [...group.displayRows].reverse().find((candidate) => candidate.snapshot_date <= date) || {{}};
-            ["total_count", "unresolved_count", "in_progress_count", "qa_verified_count", "resolved_count"].forEach((key) => {{
+            ["total_count", "unresolved_count", "in_progress_count"].forEach((key) => {{
               item[`g${{groupIndex}}_${{key}}`] = Number((exact || carry)[key]) || 0;
             }});
+            item[`g${{groupIndex}}_qa_verified_count`] = exact ? Number(exact.qa_verified_count) || 0 : 0;
+            item[`g${{groupIndex}}_resolved_count`] = exact ? Number(exact.resolved_count) || 0 : 0;
             item[`g${{groupIndex}}_new_count`] = exact ? Number(exact.new_count) || 0 : 0;
             item[`g${{groupIndex}}_completed_today_count`] = exact ? Number(exact.completed_today_count) || 0 : 0;
           }});
@@ -297,28 +307,38 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         const datedItems = items
           .map((item) => ({{ ...item, createdDate: itemCreatedDate(item) }}))
           .filter((item) => item.createdDate);
-        const dates = Array.from(new Set(datedItems.map((item) => item.createdDate))).sort();
+        const dates = Array.from(new Set(datedItems.flatMap((item) => [
+          item.createdDate,
+          item.qa_verified_first_seen_date || "",
+          item.resolved_first_seen_date || "",
+        ]).filter(Boolean))).sort();
         if (!dates.length) return compactSnapshotRows([latest]);
         return dates.map((date) => {{
           const cumulative = datedItems.filter((item) => item.createdDate <= date);
           const createdToday = datedItems.filter((item) => item.createdDate === date);
-          const resolved = cumulative.filter((item) => item.status_group === "resolved").length;
+          const resolvedCumulative = cumulative.filter((item) => item.status_group === "resolved").length;
           const inProgress = cumulative.filter((item) => item.status_group === "in_progress").length;
-          const qaVerified = cumulative.filter((item) => item.status_group === "qa_verified").length;
+          const qaVerifiedCumulative = cumulative.filter((item) => item.status_group === "qa_verified").length;
+          const qaVerifiedToday = datedItems.filter((item) => item.qa_verified_first_seen_date === date).length;
+          const resolvedToday = datedItems.filter((item) => item.resolved_first_seen_date === date).length;
           const total = cumulative.length;
           return {{
             ...latest,
             snapshot_date: date,
             total_count: total,
             new_count: createdToday.length,
-            unresolved_count: total - resolved - inProgress - qaVerified,
+            unresolved_count: total - resolvedCumulative - inProgress - qaVerifiedCumulative,
             in_progress_count: inProgress,
-            qa_verified_count: qaVerified,
-            resolved_count: resolved,
-            completed_today_count: createdToday.filter((item) => item.status_group === "resolved").length,
-            net_change_count: createdToday.length,
-            resolution_rate: total ? (resolved / total) * 100 : 0,
+            qa_verified_count: qaVerifiedToday,
+            resolved_count: resolvedToday,
+            completed_today_count: resolvedToday,
+            net_change_count: createdToday.length - resolvedToday,
+            resolution_rate: total ? (resolvedCumulative / total) * 100 : 0,
           }};
+        }}).filter((row, index, rows) => {{
+          if (row.new_count || row.qa_verified_count || row.resolved_count) return true;
+          if (index === rows.length - 1) return true;
+          return false;
         }});
       }}
 
