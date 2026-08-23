@@ -80,6 +80,8 @@ def merge_embed_html_snapshots(existing_html: str, fresh_html: str) -> str:
     merged_groups = []
     for version in versions:
         rows_by_date = {}
+        existing_items = []
+        fresh_items = []
         for payload in (existing, fresh):
             for group in payload.get("groups", []):
                 if group.get("version") != version:
@@ -88,10 +90,15 @@ def merge_embed_html_snapshots(existing_html: str, fresh_html: str) -> str:
                     snapshot_date = row.get("snapshot_date")
                     if snapshot_date:
                         rows_by_date[snapshot_date] = row
+                if payload is existing:
+                    existing_items = group.get("items", []) or existing_items
+                else:
+                    fresh_items = group.get("items", []) or fresh_items
         merged_groups.append(
             {
                 "version": version,
                 "rows": normalize_cumulative_rows([rows_by_date[key] for key in sorted(rows_by_date)]),
+                "items": fresh_items or existing_items,
             }
         )
 

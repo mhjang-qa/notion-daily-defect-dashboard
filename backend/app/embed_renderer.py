@@ -22,10 +22,13 @@ def generate_hanpass_renewal_embed(session: Session) -> Path:
     groups = []
     for version in TARGET_VERSIONS:
         rows = service.dashboard_rows(version, None)
+        latest = rows[-1] if rows else None
+        items = service.snapshot_items(latest.id) if latest else []
         groups.append(
             {
                 "version": version,
                 "rows": [row.model_dump(mode="json") for row in rows],
+                "items": [item.model_dump(mode="json") for item in items],
             }
         )
     generated_at = datetime.now(settings.tz).isoformat()
@@ -98,9 +101,28 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       .axis-label {{ fill: #57606a; font-size: 11px; }}
       .legend {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }}
       .legend i {{ display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 50%; vertical-align: -1px; }}
+      .severity-details {{ margin-top: 12px; }}
+      .section-head {{ display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 8px; }}
+      .section-head p {{ color: #57606a; font-size: 12px; }}
+      .severity-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }}
+      .severity-card {{ min-width: 0; padding: 14px; border: 1px solid #d0d7de; border-radius: 8px; background: #fff; }}
+      .severity-card h3 {{ display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; font-size: 14px; }}
+      .severity-card h3 span {{ color: #57606a; font-size: 12px; font-weight: 750; }}
+      .severity-table-wrap {{ max-height: 360px; overflow: auto; border-top: 1px solid #d8dee4; }}
+      .detail-table th, .detail-table td {{ text-align: left; white-space: normal; vertical-align: top; }}
+      .detail-table th:first-child, .detail-table td:first-child {{ width: 52px; }}
+      .detail-table th:nth-child(2), .detail-table td:nth-child(2) {{ width: 116px; }}
+      .detail-table th:nth-child(3), .detail-table td:nth-child(3) {{ width: 86px; }}
+      .defect-title {{ color: #0969da; font-weight: 650; text-decoration: none; }}
+      .defect-title:hover {{ text-decoration: underline; }}
+      .badge {{ display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px; border-radius: 999px; background: #f6f8fa; color: #57606a; font-size: 12px; font-weight: 750; }}
+      .badge.unresolved {{ background: #fff8c5; color: #7d4e00; }}
+      .badge.in_progress {{ background: #ddf4ff; color: #0550ae; }}
+      .badge.qa_verified {{ background: #fbefff; color: #8250df; }}
+      .badge.resolved {{ background: #dafbe1; color: #116329; }}
       @media (max-width: 820px) {{
         .topbar, .top-actions {{ display: grid; justify-items: start; }}
-        .versions, .charts {{ grid-template-columns: 1fr; }}
+        .versions, .charts, .severity-grid {{ grid-template-columns: 1fr; }}
         .summary {{ grid-template-columns: repeat(2, minmax(120px, 1fr)); }}
       }}
     </style>
@@ -120,6 +142,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       </header>
       <section id="summary" class="summary"></section>
       <section id="versions" class="versions"></section>
+      <section id="severity-details" class="severity-details"></section>
       <section id="charts" class="charts"></section>
     </main>
     <div id="admin-modal" class="modal-backdrop" aria-hidden="true">
@@ -141,6 +164,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       const DATA = JSON.parse(document.querySelector("#snapshot-data").textContent);
       const summary = document.querySelector("#summary");
       const versions = document.querySelector("#versions");
+      const severityDetails = document.querySelector("#severity-details");
       const charts = document.querySelector("#charts");
       const stamp = document.querySelector("#stamp");
       const ADMIN_ORIGIN = "{html.escape(render_origin)}";
@@ -173,6 +197,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           ["완료", resolved],
         ].map(([label, value]) => `<article class="card"><span>${{label}}</span><strong>${{value}}</strong></article>`).join("");
         versions.innerHTML = groups.map(renderGroup).join("");
+        severityDetails.innerHTML = renderSeverityDetails(groups);
         charts.innerHTML = renderCharts(groups);
       }}
 
@@ -252,6 +277,95 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
 
       function groupLabel(version) {{
         return version.includes("[BO]") ? "BO" : "앱";
+      }}
+
+      function renderSeverityDetails(groups) {{
+        const items = groups.flatMap((group) => (group.items || []).map((item) => ({{
+          ...item,
+          versionLabel: groupLabel(group.version),
+        }})));
+        if (!items.length) {{
+          return `
+            <article class="severity-card">
+              <div class="section-head">
+                <div>
+                  <h2>심각도별 결함 상세</h2>
+                  <p>다음 관리자 동기화 후 최신 결함 목록이 표시됩니다.</p>
+                </div>
+              </div>
+              <p class="empty">상세 결함 데이터가 없습니다.</p>
+            </article>`;
+        }}
+        const bySeverity = new Map();
+        items.forEach((item) => {{
+          const severity = normalizeSeverity(item.severity);
+          const bucket = bySeverity.get(severity) || [];
+          bucket.push(item);
+          bySeverity.set(severity, bucket);
+        }});
+        const cards = Array.from(bySeverity.entries())
+          .sort(([left], [right]) => severityRank(left) - severityRank(right) || left.localeCompare(right, "ko"))
+          .map(([severity, bucket]) => {{
+            const rows = bucket
+              .sort((a, b) => a.versionLabel.localeCompare(b.versionLabel, "ko") || statusRank(a.status_group) - statusRank(b.status_group) || String(a.title).localeCompare(String(b.title), "ko"))
+              .map((item) => `
+                <tr>
+                  <td>${{escapeHtml(item.versionLabel)}}</td>
+                  <td><span class="badge ${{escapeHtml(item.status_group || "unresolved")}}">${{statusGroupLabel(item.status_group)}} · ${{escapeHtml(item.status || "-")}}</span></td>
+                  <td>${{escapeHtml(item.priority || "-")}}</td>
+                  <td>${{item.url ? `<a class="defect-title" href="${{escapeHtml(item.url)}}" target="_blank" rel="noreferrer">${{escapeHtml(item.title || "(제목 없음)")}}</a>` : escapeHtml(item.title || "(제목 없음)")}}</td>
+                </tr>`)
+              .join("");
+            return `
+              <article class="severity-card">
+                <h3>${{escapeHtml(severity)}} <span>${{bucket.length}}건</span></h3>
+                <div class="severity-table-wrap">
+                  <table class="detail-table">
+                    <thead><tr><th>구분</th><th>상태</th><th>우선순위</th><th>결함명</th></tr></thead>
+                    <tbody>${{rows}}</tbody>
+                  </table>
+                </div>
+              </article>`;
+          }})
+          .join("");
+        return `
+          <div class="section-head">
+            <div>
+              <h2>심각도별 결함 상세</h2>
+              <p>최신 Snapshot 기준, 앱개편/BO 결함을 심각도 등급별로 분류합니다.</p>
+            </div>
+            <p>총 ${{items.length}}건</p>
+          </div>
+          <div class="severity-grid">${{cards}}</div>`;
+      }}
+
+      function normalizeSeverity(value) {{
+        const severity = String(value || "").trim();
+        return severity || "심각도 미지정";
+      }}
+
+      function severityRank(value) {{
+        const lower = String(value).toLowerCase();
+        if (lower.includes("blocker") || value.includes("차단")) return 0;
+        if (lower.includes("critical") || value.includes("치명") || value.includes("긴급")) return 1;
+        if (lower.includes("high") || value.includes("높")) return 2;
+        if (lower.includes("medium") || value.includes("중")) return 3;
+        if (lower.includes("low") || value.includes("낮")) return 4;
+        if (value.includes("미지정")) return 99;
+        return 10;
+      }}
+
+      function statusRank(value) {{
+        return {{ unresolved: 0, in_progress: 1, qa_verified: 2, resolved: 3 }}[value] ?? 9;
+      }}
+
+      function statusGroupLabel(value) {{
+        return {{
+          unresolved: "미처리",
+          in_progress: "처리중",
+          qa_verified: "QA 확인 완료",
+          resolved: "완료",
+        }}[value] || "미처리";
       }}
 
       function renderCharts(groups) {{
