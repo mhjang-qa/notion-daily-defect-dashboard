@@ -148,6 +148,7 @@ def test_hanpass_renewal_embed_renders_three_target_versions():
     assert [group["version"] for group in payload["groups"]] == [NATIVE_VERSION, BO_VERSION, PLANNING_VERSION]
     assert "[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in html
     assert 'if (version === "[Hanpass][앱개편][기획]") return "기획";' in html
+    assert "grid-template-columns: repeat(4, minmax(120px, 1fr));" in html
 
 
 def test_hanpass_renewal_embed_embeds_test_case_snapshot_without_fetch():
