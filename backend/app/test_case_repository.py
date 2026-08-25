@@ -30,8 +30,19 @@ class TestCaseRepository:
         self.notion = notion
 
     async def dashboard(self, source_url: str = DEFAULT_TEST_CASE_SOURCE_URL) -> TestCaseDashboardResponse:
-        source_id = parse_notion_id(source_url)
-        rows = await self._collect_rows(source_id, "테스트케이스")
+        rows = []
+        seen_row_keys = set()
+        for source_id in parse_notion_ids(source_url):
+            try:
+                candidate_rows = await self._collect_rows(source_id, "테스트케이스")
+            except Exception:
+                continue
+            for row in candidate_rows:
+                key = row_identity(row)
+                if key in seen_row_keys:
+                    continue
+                seen_row_keys.add(key)
+                rows.append(row)
         page_buckets: dict[str, list[dict[str, str]]] = defaultdict(list)
         for row in rows:
             page_buckets[row.get("_page_name") or "테스트케이스"].append(row)
@@ -69,21 +80,31 @@ class TestCaseRepository:
             for page in pages:
                 row = page_to_row(page)
                 row["_page_name"] = page_name_from_page(page) or page_name
+                row["_row_id"] = page.get("id", "")
                 if looks_like_test_case_row(row):
                     rows.append(row)
-            if rows:
-                return rows
+                rows.extend(await self._collect_rows(page.get("id", ""), row["_page_name"], depth - 1, visited))
         except Exception:
             pass
 
-        for block in await self._block_children(notion_id):
+        try:
+            blocks = await self._block_children(notion_id)
+        except Exception:
+            return rows
+
+        for block in blocks:
             block_type = block.get("type")
             block_id = block.get("id", "")
             if block_type == "child_database":
                 title = (block.get("child_database") or {}).get("title") or page_name
-                for page in await self._query_database(block_id):
+                try:
+                    database_pages = await self._query_database(block_id)
+                except Exception:
+                    database_pages = []
+                for page in database_pages:
                     row = page_to_row(page)
                     row["_page_name"] = title
+                    row["_row_id"] = page.get("id", "")
                     if looks_like_test_case_row(row):
                         rows.append(row)
                     rows.extend(await self._collect_rows(page.get("id", ""), title, depth - 1, visited))
@@ -92,6 +113,13 @@ class TestCaseRepository:
                 rows.extend(await self._collect_rows(block_id, title, depth - 1, visited))
             elif block_type == "table":
                 rows.extend(await self._table_rows(block_id, page_name))
+            elif block_type == "link_to_page":
+                link = block.get("link_to_page") or {}
+                linked_id = link.get("page_id") or link.get("database_id")
+                if linked_id:
+                    rows.extend(await self._collect_rows(linked_id, page_name, depth - 1, visited))
+            elif block.get("has_children"):
+                rows.extend(await self._collect_rows(block_id, page_name, depth - 1, visited))
         return rows
 
     async def _query_database(self, database_id: str) -> list[dict[str, Any]]:
@@ -140,6 +168,7 @@ class TestCaseRepository:
                 continue
             row = {headers[i] if i < len(headers) and headers[i] else f"컬럼{i + 1}": value for i, value in enumerate(values)}
             row["_page_name"] = page_name
+            row["_row_id"] = f"{table_block_id}:{index}"
             if looks_like_test_case_row(row):
                 rows.append(row)
         return rows
@@ -163,13 +192,30 @@ class TestCaseRepository:
 
 
 def parse_notion_id(value: str) -> str:
-    match = re.search(r"([0-9a-fA-F]{32})", value or "")
-    if not match:
-        match = re.search(r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})", value or "")
-    if not match:
+    ids = parse_notion_ids(value)
+    if not ids:
         raise ValueError("Notion 링크에서 페이지 ID를 찾지 못했습니다.")
-    clean = re.sub(r"[^0-9a-fA-F]", "", match.group(1))
-    return f"{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}"
+    return ids[0]
+
+
+def parse_notion_ids(value: str) -> list[str]:
+    ids = []
+    for match in re.finditer(r"([0-9a-fA-F]{32})", value or ""):
+        clean = re.sub(r"[^0-9a-fA-F]", "", match.group(1))
+        ids.append(f"{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}")
+    for match in re.finditer(r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})", value or ""):
+        clean = re.sub(r"[^0-9a-fA-F]", "", match.group(1))
+        ids.append(f"{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}")
+    deduped = list(dict.fromkeys(ids))
+    if not deduped:
+        raise ValueError("Notion 링크에서 페이지 ID를 찾지 못했습니다.")
+    return deduped
+
+
+def row_identity(row: dict[str, str]) -> str:
+    if row.get("_row_id"):
+        return row["_row_id"]
+    return "|".join(f"{key}={value}" for key, value in sorted(row.items()) if not key.startswith("_"))
 
 
 def page_to_row(page: dict[str, Any]) -> dict[str, str]:
