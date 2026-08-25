@@ -84,6 +84,7 @@ class SnapshotService:
         previous: DefectSnapshot | None = None
         for snapshot in snapshots:
             row = SnapshotRow.model_validate(snapshot)
+            row.resolution_rate = self._resolution_rate(row.resolved_count, row.qa_verified_count, row.total_count)
             if previous:
                 row.delta_total = snapshot.total_count - previous.total_count
                 row.delta_unresolved = snapshot.unresolved_count - previous.unresolved_count
@@ -104,6 +105,10 @@ class SnapshotService:
             if normalize_target_version(snapshot.target_version) == normalized_target and snapshot.target_version == normalized_target:
                 by_date[snapshot.snapshot_date] = snapshot
         return [by_date[snapshot_date] for snapshot_date in sorted(by_date)]
+
+    @staticmethod
+    def _resolution_rate(resolved: int, qa_verified: int, total: int) -> float:
+        return round(((resolved + qa_verified) / total * 100), 1) if total else 0.0
 
     def latest_snapshot(self, target_version: str) -> DefectSnapshot | None:
         return self.session.scalar(
@@ -216,7 +221,7 @@ class SnapshotService:
             "reopened_count": reopened,
             "completed_today_count": completed_today,
             "net_change_count": new_count - completed_today,
-            "resolution_rate": round((resolved / total * 100), 1) if total else 0.0,
+            "resolution_rate": self._resolution_rate(resolved, qa_verified, total),
         }
 
     def _snapshot_for_date(self, snapshot_date: date, target_version: str) -> DefectSnapshot | None:

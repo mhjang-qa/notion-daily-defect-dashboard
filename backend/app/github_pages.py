@@ -127,4 +127,7 @@ def normalize_cumulative_rows(rows: list[dict]) -> list[dict]:
     normalized = [dict(row) for row in rows]
     for row in normalized:
         row["qa_verified_count"] = int(row.get("qa_verified_count") or 0)
+        total = int(row.get("total_count") or 0)
+        resolved = int(row.get("resolved_count") or 0)
+        row["resolution_rate"] = round(((resolved + row["qa_verified_count"]) / total * 100), 1) if total else 0.0
     return normalized

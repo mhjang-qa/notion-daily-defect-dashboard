@@ -452,7 +452,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
             resolved_count: resolvedToday,
             completed_today_count: resolvedToday,
             net_change_count: createdToday.length - resolvedToday,
-            resolution_rate: total ? (resolvedCumulative / total) * 100 : 0,
+            resolution_rate: total ? ((resolvedCumulative + qaVerifiedCumulative) / total) * 100 : 0,
           }};
         }}).filter((row, index, rows) => {{
           if (row.new_count || row.qa_verified_count || row.resolved_count) return true;

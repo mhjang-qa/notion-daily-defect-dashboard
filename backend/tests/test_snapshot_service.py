@@ -159,6 +159,7 @@ def test_qa_verified_count_is_separate_from_progress_and_resolved():
     assert row.in_progress_count == 1
     assert row.resolved_count == 1
     assert row.unresolved_count == 1
+    assert row.resolution_rate == 50.0
 
 
 def test_collect_recovers_when_snapshot_is_created_between_lookup_and_insert():
