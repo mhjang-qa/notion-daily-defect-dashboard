@@ -4,7 +4,7 @@ import asyncio
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.test_case_repository import TestCaseRepository as TcRepository, normalize_tc_result, platform_results
+from app.test_case_repository import TestCaseRepository as TcRepository, linked_notion_ids_from_block, normalize_tc_result, platform_results
 
 
 def test_normalize_tc_result_counts_blank_as_not_started():
@@ -120,6 +120,67 @@ class FakeNestedSourceNotion:
         raise RuntimeError(path)
 
 
+class FakeRootLinkTreeNotion:
+    settings = SimpleNamespace(tz=ZoneInfo("Asia/Seoul"))
+
+    root_id = "11111111-1111-1111-1111-111111111111"
+    detail_id = "22222222-2222-2222-2222-222222222222"
+    os_id = "33333333-3333-3333-3333-333333333333"
+
+    async def _request(self, method: str, path: str, **kwargs):
+        if method == "POST" and path == f"/databases/{self.os_id}/query":
+            return {
+                "results": [
+                    {
+                        "id": "tc-row-1",
+                        "properties": {
+                            "Test Case": title_prop("System_001_스플래쉬"),
+                            "Result": select_prop("PASS"),
+                        },
+                    }
+                ],
+                "has_more": False,
+            }
+        if method == "POST" and path.endswith("/query"):
+            return {"results": [], "has_more": False}
+        if method == "GET" and path.startswith(f"/blocks/{self.root_id}/children"):
+            return {
+                "results": [
+                    {
+                        "id": "root-block-1",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [
+                                {
+                                    "plain_text": "BO 상세",
+                                    "mention": {"type": "page", "page": {"id": self.detail_id}},
+                                }
+                            ]
+                        },
+                    }
+                ],
+                "has_more": False,
+            }
+        if method == "GET" and path.startswith(f"/blocks/{self.detail_id}/children"):
+            compact_os_id = self.os_id.replace("-", "")
+            return {
+                "results": [
+                    {
+                        "id": "detail-block-1",
+                        "type": "bookmark",
+                        "bookmark": {
+                            "url": f"https://app.notion.com/p/AOS-{compact_os_id}?source=copy_link",
+                            "caption": [{"plain_text": "AOS 테스트케이스"}],
+                        },
+                    }
+                ],
+                "has_more": False,
+            }
+        if method == "GET" and path.startswith(f"/blocks/{self.os_id}/children"):
+            return {"results": [], "has_more": False}
+        raise RuntimeError(path)
+
+
 def test_dashboard_keeps_database_rows_when_block_children_lookup_fails():
     repo = TcRepository(FakeDatabaseNotion())
 
@@ -145,4 +206,38 @@ def test_dashboard_collects_from_explicit_nested_source_urls():
 
     assert result.summary.total_count == 1
     assert result.summary.pass_count == 1
+    assert result.platforms[0].platform == "AOS"
+
+
+def test_linked_notion_ids_from_block_detects_mentions_and_urls():
+    block = {
+        "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": [
+                {"plain_text": "상세", "mention": {"type": "page", "page": {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}}},
+                {"href": "https://app.notion.com/p/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC?source=copy_link"},
+            ]
+        },
+    }
+
+    assert linked_notion_ids_from_block(block) == [
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    ]
+
+
+def test_dashboard_traverses_root_page_links_to_os_test_case_pages():
+    repo = TcRepository(FakeRootLinkTreeNotion())
+
+    result = asyncio.run(
+        repo.dashboard(
+            f"https://app.notion.com/p/{FakeRootLinkTreeNotion.root_id.replace('-', '')}",
+            source_urls=(f"https://app.notion.com/p/{FakeRootLinkTreeNotion.root_id.replace('-', '')}",),
+        )
+    )
+
+    assert result.summary.total_count == 1
+    assert result.summary.pass_count == 1
+    assert result.pages[0].page_name == "AOS 테스트케이스"
     assert result.platforms[0].platform == "AOS"

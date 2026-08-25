@@ -13,13 +13,7 @@ DEFAULT_TEST_CASE_SOURCE_URL = (
     "https://app.notion.com/p/3a773fbd195180af93ddc50099a7df6c"
     "?v=dae73fbd1951832d8e5908953dad8da6&source=copy_link"
 )
-DEFAULT_TEST_CASE_SOURCE_URLS = (
-    DEFAULT_TEST_CASE_SOURCE_URL,
-    "https://app.notion.com/p/BO-3a773fbd1951803e8d90dde852fb46ff"
-    "?v=dae73fbd1951832d8e5908953dad8da6&source=copy_link",
-    "https://app.notion.com/p/3a773fbd195180aaa2e2d3011a1fe1a6"
-    "?v=dae73fbd1951832d8e5908953dad8da6&source=copy_link",
-)
+DEFAULT_TEST_CASE_SOURCE_URLS = (DEFAULT_TEST_CASE_SOURCE_URL,)
 
 PLATFORM_ALIASES = {
     "AOS": ("AOS", "Android", "ANDROID", "안드로이드"),
@@ -131,9 +125,10 @@ class TestCaseRepository:
             result["children"] = {"ok": False, "error_type": type(exc).__name__, "error": safe_error(exc)}
         return result
 
-    async def _collect_rows(self, notion_id: str, page_name: str, depth: int = 4, visited: set[str] | None = None) -> list[dict[str, str]]:
+    async def _collect_rows(self, notion_id: str, page_name: str, depth: int = 7, visited: set[str] | None = None) -> list[dict[str, str]]:
         if depth <= 0:
             return []
+        notion_id = normalize_notion_id(notion_id)
         visited = visited or set()
         if notion_id in visited:
             return []
@@ -183,7 +178,10 @@ class TestCaseRepository:
                 linked_id = link.get("page_id") or link.get("database_id")
                 if linked_id:
                     rows.extend(await self._collect_rows(linked_id, page_name, depth - 1, visited))
-            elif block.get("has_children"):
+            for linked_id in linked_notion_ids_from_block(block):
+                linked_page_name = linked_page_name_from_block(block, page_name)
+                rows.extend(await self._collect_rows(linked_id, linked_page_name, depth - 1, visited))
+            if block.get("has_children"):
                 rows.extend(await self._collect_rows(block_id, page_name, depth - 1, visited))
         return rows
 
@@ -264,17 +262,105 @@ def parse_notion_id(value: str) -> str:
 
 
 def parse_notion_ids(value: str) -> list[str]:
+    ids = extract_notion_ids(value)
+    if not ids:
+        raise ValueError("Notion 링크에서 페이지 ID를 찾지 못했습니다.")
+    return ids
+
+
+def extract_notion_ids(value: str) -> list[str]:
     ids = []
     for match in re.finditer(r"([0-9a-fA-F]{32})", value or ""):
-        clean = re.sub(r"[^0-9a-fA-F]", "", match.group(1))
-        ids.append(f"{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}")
+        ids.append(normalize_notion_id(match.group(1)))
     for match in re.finditer(r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})", value or ""):
-        clean = re.sub(r"[^0-9a-fA-F]", "", match.group(1))
-        ids.append(f"{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}")
-    deduped = list(dict.fromkeys(ids))
-    if not deduped:
-        raise ValueError("Notion 링크에서 페이지 ID를 찾지 못했습니다.")
-    return deduped
+        ids.append(normalize_notion_id(match.group(1)))
+    return list(dict.fromkeys(ids))
+
+
+def normalize_notion_id(value: str) -> str:
+    clean = re.sub(r"[^0-9a-fA-F]", "", value or "")
+    if len(clean) == 32:
+        return f"{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}".lower()
+    return value
+
+
+def linked_notion_ids_from_block(block: dict[str, Any]) -> list[str]:
+    block_id = normalize_notion_id(block.get("id", ""))
+    ids: list[str] = []
+
+    def add(value: str) -> None:
+        normalized = normalize_notion_id(value)
+        if normalized and normalized != block_id:
+            ids.append(normalized)
+
+    def walk(value: Any, parent_key: str = "", key: str = "") -> None:
+        if isinstance(value, dict):
+            for child_key, child_value in value.items():
+                walk(child_value, key, child_key)
+            return
+        if isinstance(value, list):
+            for item in value:
+                walk(item, parent_key, key)
+            return
+        if isinstance(value, str) and key in {"page_id", "database_id"}:
+            add(value)
+            return
+        if isinstance(value, str) and key == "id" and parent_key in {"page", "database"}:
+            add(value)
+            return
+        if isinstance(value, str) and ("notion." in value or "app.notion.com" in value or "/p/" in value):
+            for notion_id in extract_notion_ids(value):
+                add(notion_id)
+
+    walk(block)
+    return list(dict.fromkeys(ids))
+
+
+def linked_page_name_from_block(block: dict[str, Any], fallback: str) -> str:
+    text = plain_text_from_value(block.get(block.get("type", ""), {}))
+    if text:
+        return text[:80]
+    urls = text_values_from_value(block.get(block.get("type", ""), {}))
+    for url in urls:
+        name = source_page_name(url)
+        if name:
+            return name[:80]
+    return fallback
+
+
+def plain_text_from_value(value: Any) -> str:
+    texts = []
+
+    def walk(current: Any) -> None:
+        if isinstance(current, dict):
+            plain_text = current.get("plain_text")
+            if isinstance(plain_text, str) and plain_text.strip():
+                texts.append(plain_text.strip())
+            for child in current.values():
+                walk(child)
+        elif isinstance(current, list):
+            for item in current:
+                walk(item)
+
+    walk(value)
+    return " ".join(texts).strip()
+
+
+def text_values_from_value(value: Any) -> list[str]:
+    values: list[str] = []
+
+    def walk(current: Any) -> None:
+        if isinstance(current, dict):
+            for child in current.values():
+                walk(child)
+        elif isinstance(current, list):
+            for item in current:
+                walk(item)
+        elif isinstance(current, str):
+            values.append(current)
+
+    walk(value)
+    return values
 
 
 def row_identity(row: dict[str, str]) -> str:
