@@ -128,6 +128,11 @@ class NotionRepository:
                         continue
                     response.raise_for_status()
                     return response.json()
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code not in {429, 500, 502, 503, 504}:
+                        raise
+                    last_error = exc
+                    await asyncio.sleep(min(2**attempt, 16))
                 except (httpx.HTTPError, ValueError) as exc:
                     last_error = exc
                     await asyncio.sleep(min(2**attempt, 16))

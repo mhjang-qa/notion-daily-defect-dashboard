@@ -32,17 +32,13 @@ class TestCaseRepository:
     async def dashboard(self, source_url: str = DEFAULT_TEST_CASE_SOURCE_URL) -> TestCaseDashboardResponse:
         rows = []
         seen_row_keys = set()
-        for source_id in parse_notion_ids(source_url):
-            try:
-                candidate_rows = await self._collect_rows(source_id, "테스트케이스")
-            except Exception:
+        source_id = parse_notion_id(source_url)
+        for row in await self._collect_rows(source_id, "테스트케이스"):
+            key = row_identity(row)
+            if key in seen_row_keys:
                 continue
-            for row in candidate_rows:
-                key = row_identity(row)
-                if key in seen_row_keys:
-                    continue
-                seen_row_keys.add(key)
-                rows.append(row)
+            seen_row_keys.add(key)
+            rows.append(row)
         page_buckets: dict[str, list[dict[str, str]]] = defaultdict(list)
         for row in rows:
             page_buckets[row.get("_page_name") or "테스트케이스"].append(row)
@@ -83,7 +79,8 @@ class TestCaseRepository:
                 row["_row_id"] = page.get("id", "")
                 if looks_like_test_case_row(row):
                     rows.append(row)
-                rows.extend(await self._collect_rows(page.get("id", ""), row["_page_name"], depth - 1, visited))
+                else:
+                    rows.extend(await self._collect_rows(page.get("id", ""), row["_page_name"], depth - 1, visited))
         except Exception:
             pass
 
@@ -107,7 +104,8 @@ class TestCaseRepository:
                     row["_row_id"] = page.get("id", "")
                     if looks_like_test_case_row(row):
                         rows.append(row)
-                    rows.extend(await self._collect_rows(page.get("id", ""), title, depth - 1, visited))
+                    else:
+                        rows.extend(await self._collect_rows(page.get("id", ""), title, depth - 1, visited))
             elif block_type == "child_page":
                 title = (block.get("child_page") or {}).get("title") or page_name
                 rows.extend(await self._collect_rows(block_id, title, depth - 1, visited))
