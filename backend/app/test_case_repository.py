@@ -39,6 +39,8 @@ class TestCaseRepository:
                 continue
             seen_row_keys.add(key)
             rows.append(row)
+        if not rows:
+            raise RuntimeError("테스트케이스 데이터를 찾지 못했습니다. Notion integration 공유 또는 원본 테스트케이스 DB 링크를 확인하세요.")
         page_buckets: dict[str, list[dict[str, str]]] = defaultdict(list)
         for row in rows:
             page_buckets[row.get("_page_name") or "테스트케이스"].append(row)
