@@ -173,6 +173,9 @@ def test_hanpass_renewal_embed_embeds_test_case_snapshot_without_fetch():
 
     assert payload["testCases"]["summary"]["total_count"] == 10
     assert "/api/test-cases" not in html
+    assert "platform-donuts" in html
+    assert "donut-ring" in html
+    assert "function platformColor" in html
 
 
 def test_merge_embed_html_snapshots_uses_fresh_test_case_snapshot():
