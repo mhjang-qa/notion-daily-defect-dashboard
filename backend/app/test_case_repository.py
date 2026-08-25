@@ -62,6 +62,60 @@ class TestCaseRepository:
             pages=pages,
         )
 
+    async def diagnose(self, source_url: str = DEFAULT_TEST_CASE_SOURCE_URL) -> dict[str, Any]:
+        source_id = parse_notion_id(source_url)
+        result: dict[str, Any] = {
+            "source_id": source_id,
+            "database": {},
+            "children": {},
+        }
+        try:
+            pages = await self._query_database(source_id)
+            result["database"] = {
+                "ok": True,
+                "row_count": len(pages),
+                "sample_property_names": list((pages[0].get("properties") or {}).keys()) if pages else [],
+                "detected_test_rows": sum(1 for page in pages if looks_like_test_case_row(page_to_row(page))),
+            }
+        except Exception as exc:
+            result["database"] = {"ok": False, "error_type": type(exc).__name__, "error": safe_error(exc)}
+
+        try:
+            children = await self._block_children(source_id)
+            child_database_ids = [block.get("id", "") for block in children if block.get("type") == "child_database"]
+            result["children"] = {
+                "ok": True,
+                "count": len(children),
+                "types": count_values(block.get("type", "") for block in children),
+                "child_database_count": len(child_database_ids),
+                "has_children_count": sum(1 for block in children if block.get("has_children")),
+                "sample": [
+                    {
+                        "type": block.get("type", ""),
+                        "has_children": bool(block.get("has_children")),
+                        "title": block_title(block),
+                    }
+                    for block in children[:20]
+                ],
+            }
+            child_database_summaries = []
+            for database_id in child_database_ids[:5]:
+                try:
+                    pages = await self._query_database(database_id)
+                    child_database_summaries.append(
+                        {
+                            "row_count": len(pages),
+                            "sample_property_names": list((pages[0].get("properties") or {}).keys()) if pages else [],
+                            "detected_test_rows": sum(1 for page in pages if looks_like_test_case_row(page_to_row(page))),
+                        }
+                    )
+                except Exception as exc:
+                    child_database_summaries.append({"error_type": type(exc).__name__, "error": safe_error(exc)})
+            result["children"]["child_databases"] = child_database_summaries
+        except Exception as exc:
+            result["children"] = {"ok": False, "error_type": type(exc).__name__, "error": safe_error(exc)}
+        return result
+
     async def _collect_rows(self, notion_id: str, page_name: str, depth: int = 4, visited: set[str] | None = None) -> list[dict[str, str]]:
         if depth <= 0:
             return []
@@ -173,7 +227,7 @@ class TestCaseRepository:
         platform_counts: dict[str, TestCaseStatusCounts] = defaultdict(TestCaseStatusCounts)
         page_counts = TestCaseStatusCounts()
         for row in rows:
-            for platform, raw_result in platform_results(row):
+            for platform, raw_result in platform_results(row, page_name):
                 status = normalize_tc_result(raw_result)
                 add_status(platform_counts[platform], status)
                 add_status(page_counts, status)
@@ -214,6 +268,29 @@ def row_identity(row: dict[str, str]) -> str:
     return "|".join(f"{key}={value}" for key, value in sorted(row.items()) if not key.startswith("_"))
 
 
+def safe_error(exc: Exception) -> str:
+    text = str(exc)
+    return text[:180]
+
+
+def count_values(values) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[str(value)] = counts.get(str(value), 0) + 1
+    return counts
+
+
+def block_title(block: dict[str, Any]) -> str:
+    block_type = block.get("type", "")
+    data = block.get(block_type) or {}
+    title = data.get("title")
+    if isinstance(title, str):
+        return title[:80]
+    if isinstance(title, list):
+        return "".join(part.get("plain_text", "") for part in title)[:80]
+    return ""
+
+
 def page_to_row(page: dict[str, Any]) -> dict[str, str]:
     return {name: property_to_text(prop) for name, prop in (page.get("properties") or {}).items()}
 
@@ -242,6 +319,16 @@ def property_to_text(prop: dict[str, Any] | None) -> str:
         return "" if value is None else str(value)
     if prop_type == "date":
         return (value or {}).get("start", "") if isinstance(value, dict) else ""
+    if prop_type == "formula":
+        return formula_to_text(value if isinstance(value, dict) else {})
+    if prop_type == "rollup":
+        return rollup_to_text(value if isinstance(value, dict) else {})
+    if prop_type == "unique_id":
+        if not isinstance(value, dict):
+            return ""
+        prefix = value.get("prefix") or ""
+        number = value.get("number")
+        return f"{prefix}-{number}" if prefix and number is not None else ("" if number is None else str(number))
     return "" if value is None else str(value)
 
 
@@ -253,7 +340,7 @@ def looks_like_test_case_row(row: dict[str, str]) -> bool:
     return bool(detected) or bool(find_column(row, OS_COLUMN_CANDIDATES) and find_column(row, RESULT_COLUMN_CANDIDATES))
 
 
-def platform_results(row: dict[str, str]) -> list[tuple[str, str]]:
+def platform_results(row: dict[str, str], page_name: str = "") -> list[tuple[str, str]]:
     platform_columns = detected_platform_columns(row)
     if platform_columns:
         return [(platform, row.get(column, "")) for platform, column in platform_columns.items()]
@@ -262,6 +349,18 @@ def platform_results(row: dict[str, str]) -> list[tuple[str, str]]:
     result_column = find_column(row, RESULT_COLUMN_CANDIDATES)
     if os_column and result_column:
         return [(canonical_platform(row.get(os_column, "")), row.get(result_column, ""))]
+    if os_column:
+        status = status_from_status_columns(row)
+        if status:
+            return [(canonical_platform(row.get(os_column, "")), status)]
+
+    page_platform = infer_platform(page_name)
+    if page_platform:
+        if result_column:
+            return [(page_platform, row.get(result_column, ""))]
+        status = status_from_status_columns(row)
+        if status:
+            return [(page_platform, status)]
     return []
 
 
@@ -305,6 +404,14 @@ def canonical_platform(value: str) -> str:
     return text or "미분류"
 
 
+def infer_platform(value: str) -> str:
+    text_compact = compact(value)
+    for platform, aliases in PLATFORM_ALIASES.items():
+        if any(compact(alias) in text_compact for alias in aliases):
+            return platform
+    return ""
+
+
 def normalize_tc_result(value: str) -> str:
     text = str(value or "").strip()
     key = re.sub(r"[\s/_-]+", "", text).upper()
@@ -318,6 +425,39 @@ def normalize_tc_result(value: str) -> str:
     if key in {"NA", "N/A", "NONE", "NULL", "해당없음", "해당무", "제외", "미대상"} or clean in {"NA", "NAN"}:
         return "na"
     return "other"
+
+
+def status_from_status_columns(row: dict[str, str]) -> str:
+    for status in ("PASS", "FAIL", "NA"):
+        column = find_column(row, (status, f"{status} 여부", f"{status} 결과"))
+        if column and truthy_cell(row.get(column, "")):
+            return status
+    return ""
+
+
+def truthy_cell(value: str) -> bool:
+    key = re.sub(r"[\s/_-]+", "", str(value or "")).upper()
+    return key in {"TRUE", "YES", "Y", "1", "CHECKED", "체크", "확인", "O", "✓", "✅"}
+
+
+def formula_to_text(value: dict[str, Any]) -> str:
+    formula_type = value.get("type")
+    raw = value.get(formula_type)
+    if formula_type == "date":
+        return (raw or {}).get("start", "") if isinstance(raw, dict) else ""
+    if raw is None:
+        return ""
+    return str(raw)
+
+
+def rollup_to_text(value: dict[str, Any]) -> str:
+    rollup_type = value.get("type")
+    raw = value.get(rollup_type)
+    if rollup_type == "array":
+        return ", ".join(property_to_text(item) for item in raw or [])
+    if raw is None:
+        return ""
+    return str(raw)
 
 
 def add_status(counts: TestCaseStatusCounts, status: str) -> None:

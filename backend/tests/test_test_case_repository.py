@@ -40,6 +40,27 @@ def test_platform_results_detects_os_and_result_pair():
     assert platform_results(row) == [("AOS", "NA")]
 
 
+def test_platform_results_detects_os_and_status_columns():
+    row = {
+        "Test Case": "로그인",
+        "OS": "iOS",
+        "PASS": "true",
+        "FAIL": "",
+        "NA": "",
+    }
+
+    assert platform_results(row) == [("iOS", "PASS")]
+
+
+def test_platform_results_uses_platform_page_name_with_result_column():
+    row = {
+        "Test Case": "로그인",
+        "Result": "FAIL",
+    }
+
+    assert platform_results(row, "AOS 테스트케이스") == [("AOS", "FAIL")]
+
+
 def test_fake_notion_settings_shape_for_repository_tests():
     settings = SimpleNamespace(tz=ZoneInfo("Asia/Seoul"))
 
