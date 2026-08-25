@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import asyncio
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -29,6 +30,7 @@ TC_TITLE_CANDIDATES = ("TC-ID", "TC ID", "Test Case", "Test Item", "테스트 �
 class TestCaseRepository:
     def __init__(self, notion: NotionRepository):
         self.notion = notion
+        self._traversal_semaphore = asyncio.Semaphore(6)
 
     async def dashboard(
         self,
@@ -125,7 +127,14 @@ class TestCaseRepository:
             result["children"] = {"ok": False, "error_type": type(exc).__name__, "error": safe_error(exc)}
         return result
 
-    async def _collect_rows(self, notion_id: str, page_name: str, depth: int = 7, visited: set[str] | None = None) -> list[dict[str, str]]:
+    async def _collect_rows(
+        self,
+        notion_id: str,
+        page_name: str,
+        depth: int = 7,
+        visited: set[str] | None = None,
+        try_database: bool = True,
+    ) -> list[dict[str, str]]:
         if depth <= 0:
             return []
         notion_id = normalize_notion_id(notion_id)
@@ -135,18 +144,21 @@ class TestCaseRepository:
         visited.add(notion_id)
 
         rows = []
-        try:
-            pages = await self._query_database(notion_id)
-            for page in pages:
-                row = page_to_row(page)
-                row["_page_name"] = page_name
-                row["_row_id"] = page.get("id", "")
-                if looks_like_test_case_row(row):
-                    rows.append(row)
-            if pages:
-                return rows
-        except Exception:
-            pass
+        if try_database:
+            try:
+                pages = await self._query_database(notion_id)
+                for page in pages:
+                    row = page_to_row(page)
+                    row["_page_name"] = page_name
+                    row["_row_id"] = page.get("id", "")
+                    if looks_like_test_case_row(row):
+                        rows.append(row)
+                if rows:
+                    return rows
+                if pages:
+                    return await self._collect_page_rows(pages, page_name, depth, visited)
+            except Exception:
+                pass
 
         try:
             blocks = await self._block_children(notion_id)
@@ -162,12 +174,17 @@ class TestCaseRepository:
                     database_pages = await self._query_database(block_id)
                 except Exception:
                     database_pages = []
+                database_rows = []
                 for page in database_pages:
                     row = page_to_row(page)
                     row["_page_name"] = title
                     row["_row_id"] = page.get("id", "")
                     if looks_like_test_case_row(row):
-                        rows.append(row)
+                        database_rows.append(row)
+                if database_rows:
+                    rows.extend(database_rows)
+                else:
+                    rows.extend(await self._collect_page_rows(database_pages, title, depth, visited))
             elif block_type == "child_page":
                 title = (block.get("child_page") or {}).get("title") or page_name
                 rows.extend(await self._collect_rows(block_id, title, depth - 1, visited))
@@ -182,7 +199,27 @@ class TestCaseRepository:
                 linked_page_name = linked_page_name_from_block(block, page_name)
                 rows.extend(await self._collect_rows(linked_id, linked_page_name, depth - 1, visited))
             if block.get("has_children"):
-                rows.extend(await self._collect_rows(block_id, page_name, depth - 1, visited))
+                rows.extend(await self._collect_rows(block_id, page_name, depth - 1, visited, try_database=False))
+        return rows
+
+    async def _collect_page_rows(
+        self,
+        pages: list[dict[str, Any]],
+        fallback_page_name: str,
+        depth: int,
+        visited: set[str],
+    ) -> list[dict[str, str]]:
+        async def collect(page: dict[str, Any]) -> list[dict[str, str]]:
+            async with self._traversal_semaphore:
+                child_page_name = page_name_from_page(page) or fallback_page_name
+                return await self._collect_rows(page.get("id", ""), child_page_name, depth - 1, visited, try_database=False)
+
+        chunks = await asyncio.gather(*(collect(page) for page in pages if page.get("id")), return_exceptions=True)
+        rows: list[dict[str, str]] = []
+        for chunk in chunks:
+            if isinstance(chunk, Exception):
+                continue
+            rows.extend(chunk)
         return rows
 
     async def _query_database(self, database_id: str) -> list[dict[str, Any]]:

@@ -181,6 +181,64 @@ class FakeRootLinkTreeNotion:
         raise RuntimeError(path)
 
 
+class FakeRootDatabaseTreeNotion:
+    settings = SimpleNamespace(tz=ZoneInfo("Asia/Seoul"))
+
+    root_id = "44444444-4444-4444-4444-444444444444"
+    feature_page_id = "55555555-5555-5555-5555-555555555555"
+    os_id = "66666666-6666-6666-6666-666666666666"
+
+    async def _request(self, method: str, path: str, **kwargs):
+        if method == "POST" and path == f"/databases/{self.root_id}/query":
+            return {
+                "results": [
+                    {
+                        "id": self.feature_page_id,
+                        "properties": {
+                            "Feature": title_prop("BO 상세"),
+                            "개발상태": select_prop("진행중"),
+                        },
+                    }
+                ],
+                "has_more": False,
+            }
+        if method == "POST" and path == f"/databases/{self.os_id}/query":
+            return {
+                "results": [
+                    {
+                        "id": "tc-row-2",
+                        "properties": {
+                            "Test Case": title_prop("System_002_로그인"),
+                            "Result": select_prop("NA"),
+                        },
+                    }
+                ],
+                "has_more": False,
+            }
+        if method == "POST" and path.endswith("/query"):
+            return {"results": [], "has_more": False}
+        if method == "GET" and path.startswith(f"/blocks/{self.feature_page_id}/children"):
+            compact_os_id = self.os_id.replace("-", "")
+            return {
+                "results": [
+                    {
+                        "id": "feature-block-1",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [
+                                {
+                                    "plain_text": "iOS 테스트케이스",
+                                    "href": f"https://app.notion.com/p/iOS-{compact_os_id}?source=copy_link",
+                                }
+                            ]
+                        },
+                    }
+                ],
+                "has_more": False,
+            }
+        return {"results": [], "has_more": False}
+
+
 def test_dashboard_keeps_database_rows_when_block_children_lookup_fails():
     repo = TcRepository(FakeDatabaseNotion())
 
@@ -241,3 +299,19 @@ def test_dashboard_traverses_root_page_links_to_os_test_case_pages():
     assert result.summary.pass_count == 1
     assert result.pages[0].page_name == "AOS 테스트케이스"
     assert result.platforms[0].platform == "AOS"
+
+
+def test_dashboard_traverses_non_test_database_rows_to_nested_test_cases():
+    repo = TcRepository(FakeRootDatabaseTreeNotion())
+
+    result = asyncio.run(
+        repo.dashboard(
+            f"https://app.notion.com/p/{FakeRootDatabaseTreeNotion.root_id.replace('-', '')}",
+            source_urls=(f"https://app.notion.com/p/{FakeRootDatabaseTreeNotion.root_id.replace('-', '')}",),
+        )
+    )
+
+    assert result.summary.total_count == 1
+    assert result.summary.na_count == 1
+    assert result.pages[0].page_name == "iOS 테스트케이스"
+    assert result.platforms[0].platform == "iOS"
