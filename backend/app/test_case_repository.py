@@ -79,8 +79,8 @@ class TestCaseRepository:
                 row["_row_id"] = page.get("id", "")
                 if looks_like_test_case_row(row):
                     rows.append(row)
-                else:
-                    rows.extend(await self._collect_rows(page.get("id", ""), row["_page_name"], depth - 1, visited))
+            if pages:
+                return rows
         except Exception:
             pass
 
@@ -104,8 +104,6 @@ class TestCaseRepository:
                     row["_row_id"] = page.get("id", "")
                     if looks_like_test_case_row(row):
                         rows.append(row)
-                    else:
-                        rows.extend(await self._collect_rows(page.get("id", ""), title, depth - 1, visited))
             elif block_type == "child_page":
                 title = (block.get("child_page") or {}).get("title") or page_name
                 rows.extend(await self._collect_rows(block_id, title, depth - 1, visited))
