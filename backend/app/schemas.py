@@ -67,3 +67,30 @@ class CollectResponse(BaseModel):
     snapshots_created: int
     snapshots_updated: int
     item_count: int
+
+
+class TestCaseStatusCounts(BaseModel):
+    total_count: int = 0
+    pass_count: int = 0
+    fail_count: int = 0
+    na_count: int = 0
+    not_started_count: int = 0
+    other_count: int = 0
+    progress_rate: float = 0.0
+
+
+class TestCasePlatformStats(TestCaseStatusCounts):
+    platform: str
+
+
+class TestCasePageStats(TestCaseStatusCounts):
+    page_name: str
+    platforms: list[TestCasePlatformStats]
+
+
+class TestCaseDashboardResponse(BaseModel):
+    source_url: str
+    updated_at: datetime
+    summary: TestCaseStatusCounts
+    platforms: list[TestCasePlatformStats]
+    pages: list[TestCasePageStats]

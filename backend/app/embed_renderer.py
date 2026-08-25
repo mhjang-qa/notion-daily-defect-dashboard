@@ -11,9 +11,15 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .schemas import SnapshotItemRow
 from .snapshot_service import SnapshotService
+from .target_versions import (
+    HANPASS_RENEWAL_BO,
+    HANPASS_RENEWAL_NATIVE,
+    HANPASS_RENEWAL_PLANNING,
+    HANPASS_RENEWAL_TARGET_VERSIONS,
+)
 
 
-TARGET_VERSIONS = ["[Hanpass][앱개편]", "[Hanpass][앱개편][BO]"]
+TARGET_VERSIONS = HANPASS_RENEWAL_TARGET_VERSIONS
 GENERATED_EMBED_PATH = Path(os.environ.get("HANPASS_RENEWAL_EMBED_PATH", "/tmp/hanpass-renewal.html"))
 
 
@@ -129,7 +135,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       <header class="topbar">
         <div>
           <h1>Hanpass 앱개편 결함 현황</h1>
-          <p class="subtitle">[Hanpass][앱개편], [Hanpass][앱개편][BO] 전용 Notion Embed</p>
+          <p class="subtitle">[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획] 전용 Notion Embed</p>
         </div>
         <div class="top-actions">
           <button id="admin-open" class="action-link" type="button" hidden>관리자 동기화</button>
@@ -280,7 +286,24 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       }}
 
       function groupLabel(version) {{
-        return version.includes("[BO]") ? "BO" : "앱";
+        if (version === "{HANPASS_RENEWAL_NATIVE}") return "Native";
+        if (version === "{HANPASS_RENEWAL_BO}") return "BO";
+        if (version === "{HANPASS_RENEWAL_PLANNING}") return "기획";
+        return version;
+      }}
+
+      function groupColor(groupIndex, key) {{
+        const colors = {{
+          new_count: ["#1f6feb", "#8250df", "#bf8700"],
+          completed_today_count: ["#1a7f37", "#2da44e", "#1f883d"],
+          unresolved_count: ["#d1242f", "#cf222e", "#a40e26"],
+        }};
+        const palette = colors[key] || colors.new_count;
+        return palette[groupIndex % palette.length];
+      }}
+
+      function groupDash(groupIndex) {{
+        return ["", "6 4", "2 5"][groupIndex % 3];
       }}
 
       function displayRows(group) {{
@@ -388,7 +411,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
           <div class="section-head">
             <div>
               <h2>심각도별 결함 상세</h2>
-              <p>최신 Snapshot 기준, 앱개편/BO 결함을 심각도 등급별로 분류합니다.</p>
+              <p>최신 Snapshot 기준, Native/BO/기획 결함을 심각도 등급별로 분류합니다.</p>
             </div>
             <p>총 ${{items.length}}건</p>
           </div>
@@ -434,12 +457,12 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
             `g${{groupIndex}}_${{key}}`,
             dailyColors[key],
             `${{groupLabel(group.version)}} ${{dailyLabels[key]}}`,
-            groupIndex === 1 ? "6 4" : "",
+            groupDash(groupIndex),
           ])
         );
         const newSeries = activeGroups.map((group, groupIndex) => [
           `g${{groupIndex}}_new_count`,
-          groupIndex === 0 ? "#1f6feb" : "#8250df",
+          groupColor(groupIndex, "new_count"),
           `${{groupLabel(group.version)}} 신규`,
         ]);
         return `
@@ -457,9 +480,9 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
             <div class="chart-head"><h2>Resolution Progress</h2><span>신규 / 완료 / 미처리 잔량</span></div>
             <div class="chart-box">${{comboChart(rows, activeGroups)}}</div>
             ${{legend(activeGroups.flatMap((group, groupIndex) => [
-              [groupIndex === 0 ? "#1f6feb" : "#8250df", `${{groupLabel(group.version)}} 신규`],
-              [groupIndex === 0 ? "#1a7f37" : "#2da44e", `${{groupLabel(group.version)}} 완료`],
-              [groupIndex === 0 ? "#d1242f" : "#cf222e", `${{groupLabel(group.version)}} 미처리`, groupIndex === 1 ? "6 4" : ""],
+              [groupColor(groupIndex, "new_count"), `${{groupLabel(group.version)}} 신규`],
+              [groupColor(groupIndex, "completed_today_count"), `${{groupLabel(group.version)}} 완료`],
+              [groupColor(groupIndex, "unresolved_count"), `${{groupLabel(group.version)}} 미처리`, groupDash(groupIndex)],
             ]))}}
           </article>`;
       }}
@@ -533,8 +556,8 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         const scale = chartScales(rows, keys);
         const step = scale.plotWidth / Math.max(1, rows.length);
         const barSeries = groups.flatMap((group, groupIndex) => [
-          [`g${{groupIndex}}_new_count`, groupIndex === 0 ? "#1f6feb" : "#8250df", `${{groupLabel(group.version)}} 신규`],
-          [`g${{groupIndex}}_completed_today_count`, groupIndex === 0 ? "#1a7f37" : "#2da44e", `${{groupLabel(group.version)}} 완료`],
+          [`g${{groupIndex}}_new_count`, groupColor(groupIndex, "new_count"), `${{groupLabel(group.version)}} 신규`],
+          [`g${{groupIndex}}_completed_today_count`, groupColor(groupIndex, "completed_today_count"), `${{groupLabel(group.version)}} 완료`],
         ]);
         const barWidth = Math.max(6, Math.min(18, (step * 0.72) / Math.max(1, barSeries.length)));
         const base = scale.height - scale.pad.bottom;
@@ -546,11 +569,12 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
         }})).join("");
         const lines = groups.map((group, groupIndex) => {{
           const key = `g${{groupIndex}}_unresolved_count`;
-          const color = groupIndex === 0 ? "#d1242f" : "#cf222e";
+          const color = groupColor(groupIndex, "unresolved_count");
           const label = `${{groupLabel(group.version)}} 미처리`;
           const points = rows.map((row, index) => `${{scale.x(index)}},${{scale.y(row[key])}}`).join(" ");
           const dots = rows.map((row, index) => `<circle cx="${{scale.x(index)}}" cy="${{scale.y(row[key])}}" r="3.5" fill="${{color}}"><title>${{formatDate(row.snapshot_date)}} ${{label}}: ${{row[key]}}</title></circle>`).join("");
-          const dashAttr = groupIndex === 1 ? ` stroke-dasharray="6 4"` : "";
+          const dash = groupDash(groupIndex);
+          const dashAttr = dash ? ` stroke-dasharray="${{dash}}"` : "";
           return `<polyline points="${{points}}" fill="none" stroke="${{color}}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"${{dashAttr}}></polyline>${{dots}}`;
         }}).join("");
         return `<svg viewBox="0 0 ${{scale.width}} ${{scale.height}}" role="img" aria-label="Resolution Progress">${{grid(rows, scale)}}${{bars}}${{lines}}</svg>`;

@@ -10,6 +10,7 @@ import httpx
 
 from .config import Settings
 from .embed_renderer import render_hanpass_renewal_embed
+from .target_versions import normalize_target_version, sort_target_versions
 
 
 @dataclass(frozen=True)
@@ -71,29 +72,35 @@ def merge_embed_html_snapshots(existing_html: str, fresh_html: str) -> str:
     if not existing or not fresh:
         return fresh_html
 
-    versions = []
+    versions = set()
     for group in [*existing.get("groups", []), *fresh.get("groups", [])]:
-        version = group.get("version")
-        if version and version not in versions:
-            versions.append(version)
+        version = normalize_target_version(group.get("version") or "")
+        if version:
+            versions.add(version)
 
     merged_groups = []
-    for version in versions:
+    for version in sort_target_versions(list(versions)):
         rows_by_date = {}
         existing_items = []
         fresh_items = []
         for payload in (existing, fresh):
             for group in payload.get("groups", []):
-                if group.get("version") != version:
+                if normalize_target_version(group.get("version") or "") != version:
                     continue
                 for row in group.get("rows", []):
                     snapshot_date = row.get("snapshot_date")
                     if snapshot_date:
-                        rows_by_date[snapshot_date] = row
+                        rows_by_date[snapshot_date] = {**row, "target_version": version}
                 if payload is existing:
-                    existing_items = group.get("items", []) or existing_items
+                    existing_items = [
+                        {**item, "target_version": version}
+                        for item in group.get("items", [])
+                    ] or existing_items
                 else:
-                    fresh_items = group.get("items", []) or fresh_items
+                    fresh_items = [
+                        {**item, "target_version": version}
+                        for item in group.get("items", [])
+                    ] or fresh_items
         merged_groups.append(
             {
                 "version": version,

@@ -8,6 +8,7 @@ import httpx
 
 from .config import Settings
 from .schemas import DefectRecord
+from .target_versions import normalize_target_versions, sort_target_versions
 
 
 class NotionConfigurationError(RuntimeError):
@@ -88,8 +89,13 @@ class NotionRepository:
 
     async def list_target_versions(self) -> list[str]:
         records = await self.list_defects()
-        versions = sorted({record.target_version for record in records if record.target_version})
-        return versions
+        versions = {
+            version
+            for record in records
+            for version in normalize_target_versions(record.target_version)
+            if version
+        }
+        return sort_target_versions(list(versions))
 
     async def _query_all_pages(self) -> list[dict[str, Any]]:
         pages: list[dict[str, Any]] = []

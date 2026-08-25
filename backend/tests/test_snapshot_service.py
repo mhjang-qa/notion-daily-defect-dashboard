@@ -101,6 +101,43 @@ def test_same_date_snapshot_updates_without_duplicate():
     assert rows[0].total_count == 2
 
 
+def test_collect_normalizes_hanpass_renewal_versions():
+    session = make_session()
+    service = SnapshotService(session)
+    now = datetime(2026, 8, 24, 8, 30, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    result = service.collect(
+        [
+            record("a", "unresolved", "[Hanpass][앱개편]"),
+            record("b", "unresolved", "[Hanpass][앱개편][BO], [Hanpass][앱개편][기획]"),
+        ],
+        date(2026, 8, 24),
+        now,
+    )
+
+    assert result.target_versions == [
+        "[Hanpass][앱개편][Native]",
+        "[Hanpass][앱개편][BO]",
+        "[Hanpass][앱개편][기획]",
+    ]
+    assert service.dashboard_rows("[Hanpass][앱개편][Native]", None)[0].total_count == 1
+    assert service.dashboard_rows("[Hanpass][앱개편][BO]", None)[0].total_count == 1
+    assert service.dashboard_rows("[Hanpass][앱개편][기획]", None)[0].total_count == 1
+
+
+def test_native_dashboard_rows_include_legacy_history_without_duplicate_dates():
+    session = make_session()
+    service = SnapshotService(session)
+    now = datetime(2026, 8, 24, 8, 30, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    service.collect([record("a", "unresolved", "[Hanpass][앱개편]")], date(2026, 8, 23), now)
+    service.collect([record("a", "unresolved", "[Hanpass][앱개편][Native]")], date(2026, 8, 24), now)
+
+    rows = service.dashboard_rows("[Hanpass][앱개편][Native]", None)
+
+    assert [row.snapshot_date for row in rows] == [date(2026, 8, 23), date(2026, 8, 24)]
+
+
 def test_qa_verified_count_is_separate_from_progress_and_resolved():
     session = make_session()
     service = SnapshotService(session)

@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Play, RefreshCw } from "lucide-react";
+import { ClipboardCheck, Play, RefreshCw } from "lucide-react";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -53,12 +53,42 @@ type SnapshotItem = {
   url: string;
 };
 
+type TestCaseCounts = {
+  total_count: number;
+  pass_count: number;
+  fail_count: number;
+  na_count: number;
+  not_started_count: number;
+  other_count: number;
+  progress_rate: number;
+};
+
+type TestCasePlatformStats = TestCaseCounts & {
+  platform: string;
+};
+
+type TestCasePageStats = TestCaseCounts & {
+  page_name: string;
+  platforms: TestCasePlatformStats[];
+};
+
+type TestCaseDashboardResponse = {
+  source_url: string;
+  updated_at: string;
+  summary: TestCaseCounts;
+  platforms: TestCasePlatformStats[];
+  pages: TestCasePageStats[];
+};
+
 function App() {
+  const [activeTab, setActiveTab] = useState<"defects" | "testCases">("defects");
   const [versions, setVersions] = useState<string[]>([]);
   const [targetVersion, setTargetVersion] = useState("");
   const [range, setRange] = useState("30d");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [testCases, setTestCases] = useState<TestCaseDashboardResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [testCaseLoading, setTestCaseLoading] = useState(false);
   const [collecting, setCollecting] = useState(false);
   const [message, setMessage] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -73,6 +103,12 @@ function App() {
       loadDashboard(targetVersion, range);
     }
   }, [targetVersion, range]);
+
+  useEffect(() => {
+    if (activeTab === "testCases" && !testCases) {
+      loadTestCases();
+    }
+  }, [activeTab, testCases]);
 
   const rows = dashboard?.rows ?? [];
   const latest = rows.at(-1);
@@ -140,6 +176,19 @@ function App() {
     }
   }
 
+  async function loadTestCases() {
+    setTestCaseLoading(true);
+    setMessage("");
+    try {
+      const data = await request<TestCaseDashboardResponse>("/api/test-cases");
+      setTestCases(data);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setTestCaseLoading(false);
+    }
+  }
+
   async function toggleItems(snapshotId: number) {
     if (expandedId === snapshotId) {
       setExpandedId(null);
@@ -157,41 +206,68 @@ function App() {
       <header className="topbar">
         <div>
           <h1>Defect Trend Dashboard</h1>
-          <p>Updated {latest ? formatDateTime(latest.collected_at) : "-"}</p>
+          <p>
+            {activeTab === "defects"
+              ? `Updated ${latest ? formatDateTime(latest.collected_at) : "-"}`
+              : `TC Updated ${testCases ? formatDateTime(testCases.updated_at) : "-"}`}
+          </p>
         </div>
         <div className="actions">
-          <label>
-            목표버전
-            <select value={targetVersion} onChange={(event) => setTargetVersion(event.target.value)}>
-              {versions.map((version) => (
-                <option value={version} key={version}>
-                  {version}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            기간
-            <select value={range} onChange={(event) => setRange(event.target.value)}>
-              <option value="7d">최근 7일</option>
-              <option value="14d">최근 14일</option>
-              <option value="30d">최근 30일</option>
-              <option value="all">전체</option>
-            </select>
-          </label>
-          <button onClick={loadVersions} disabled={loading} title="새로고침">
-            <RefreshCw size={16} />
-            새로고침
-          </button>
-          <button className="primary" onClick={collectNow} disabled={collecting} title="지금 데이터 수집">
-            <Play size={16} />
-            지금 수집
-          </button>
+          {activeTab === "defects" ? (
+            <>
+              <label>
+                목표버전
+                <select value={targetVersion} onChange={(event) => setTargetVersion(event.target.value)}>
+                  {versions.map((version) => (
+                    <option value={version} key={version}>
+                      {version}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                기간
+                <select value={range} onChange={(event) => setRange(event.target.value)}>
+                  <option value="7d">최근 7일</option>
+                  <option value="14d">최근 14일</option>
+                  <option value="30d">최근 30일</option>
+                  <option value="all">전체</option>
+                </select>
+              </label>
+              <button onClick={loadVersions} disabled={loading} title="새로고침">
+                <RefreshCw size={16} />
+                새로고침
+              </button>
+              <button className="primary" onClick={collectNow} disabled={collecting} title="지금 데이터 수집">
+                <Play size={16} />
+                지금 수집
+              </button>
+            </>
+          ) : (
+            <button onClick={loadTestCases} disabled={testCaseLoading} title="테스트케이스 새로고침">
+              <RefreshCw size={16} />
+              TC 새로고침
+            </button>
+          )}
         </div>
       </header>
 
+      <nav className="tabs" aria-label="대시보드 탭">
+        <button className={activeTab === "defects" ? "active" : ""} type="button" onClick={() => setActiveTab("defects")}>
+          결함 추이
+        </button>
+        <button className={activeTab === "testCases" ? "active" : ""} type="button" onClick={() => setActiveTab("testCases")}>
+          <ClipboardCheck size={16} />
+          테스트케이스 현황
+        </button>
+      </nav>
+
       {message && <div className="notice">{message}</div>}
 
+      {activeTab === "testCases" ? (
+        <TestCaseDashboard data={testCases} loading={testCaseLoading} />
+      ) : (
+        <>
       <section className="kpis">
         {kpis.map((kpi) => (
           <article className="kpi" key={kpi.label}>
@@ -305,7 +381,120 @@ function App() {
           </table>
         </div>
       </section>
+        </>
+      )}
     </main>
+  );
+}
+
+function TestCaseDashboard({ data, loading }: { data: TestCaseDashboardResponse | null; loading: boolean }) {
+  if (loading && !data) return <section className="panel empty-panel">테스트케이스 데이터를 불러오는 중입니다.</section>;
+  if (!data) return <section className="panel empty-panel">테스트케이스 집계 데이터가 없습니다.</section>;
+
+  const summary = data.summary;
+  const platformRows = data.platforms.map((platform) => ({
+    ...platform,
+    label: platform.platform,
+  }));
+
+  return (
+    <>
+      <section className="kpis tc-kpis">
+        <KpiCard label="전체 TC" value={summary.total_count} />
+        <KpiCard label="PASS" value={summary.pass_count} />
+        <KpiCard label="FAIL" value={summary.fail_count} />
+        <KpiCard label="NA" value={summary.na_count} />
+        <KpiCard label="미진행" value={summary.not_started_count} />
+        <KpiCard label="진행률" value={`${summary.progress_rate.toFixed(1)}%`} />
+      </section>
+
+      <section className="split">
+        <article className="panel">
+          <div className="panel-title">
+            <h2>OS별 테스트 결과</h2>
+            <span>PASS / FAIL / NA / 미진행</span>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={platformRows}>
+              <CartesianGrid stroke="#dde3ea" vertical={false} />
+              <XAxis dataKey="label" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="pass_count" name="PASS" stackId="tc" fill="#1a7f37" />
+              <Bar dataKey="fail_count" name="FAIL" stackId="tc" fill="#d1242f" />
+              <Bar dataKey="na_count" name="NA" stackId="tc" fill="#8250df" />
+              <Bar dataKey="not_started_count" name="미진행" stackId="tc" fill="#8c959f" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </article>
+
+        <article className="panel">
+          <div className="panel-title">
+            <h2>OS별 진행률</h2>
+            <span>PASS+FAIL+NA / 전체</span>
+          </div>
+          <div className="progress-list">
+            {data.platforms.map((platform) => (
+              <div className="progress-row" key={platform.platform}>
+                <div>
+                  <strong>{platform.platform}</strong>
+                  <span>{platform.progress_rate.toFixed(1)}%</span>
+                </div>
+                <div className="progress-track">
+                  <div style={{ width: `${Math.min(100, platform.progress_rate)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="panel">
+        <div className="panel-title">
+          <h2>페이지별 테스트케이스 현황</h2>
+          <span>하위 Notion 페이지/DB 기준</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>구분</th>
+                <th>전체</th>
+                <th>PASS</th>
+                <th>FAIL</th>
+                <th>NA</th>
+                <th>미진행</th>
+                <th>기타</th>
+                <th>진행률</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.pages.map((page) => (
+                <tr key={page.page_name}>
+                  <td>{page.page_name}</td>
+                  <td>{page.total_count}</td>
+                  <td>{page.pass_count}</td>
+                  <td>{page.fail_count}</td>
+                  <td>{page.na_count}</td>
+                  <td>{page.not_started_count}</td>
+                  <td>{page.other_count}</td>
+                  <td>{page.progress_rate.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function KpiCard({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <article className="kpi">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
   );
 }
 

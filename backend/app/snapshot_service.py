@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .models import DefectSnapshot, DefectSnapshotItem
 from .schemas import CollectResponse, DefectRecord, SnapshotRow
+from .target_versions import normalize_target_version, normalize_target_versions, sort_target_versions, target_version_query_values
 
 
 class SnapshotService:
@@ -18,7 +19,9 @@ class SnapshotService:
     def collect(self, records: list[DefectRecord], snapshot_date: date, collected_at: datetime) -> CollectResponse:
         grouped: dict[str, list[DefectRecord]] = defaultdict(list)
         for record in records:
-            grouped[record.target_version or "(목표버전 없음)"].append(record)
+            target_versions = normalize_target_versions(record.target_version) or ["(목표버전 없음)"]
+            for target_version in target_versions:
+                grouped[target_version].append(record.model_copy(update={"target_version": target_version}))
 
         created = 0
         updated = 0
@@ -41,7 +44,7 @@ class SnapshotService:
 
         return CollectResponse(
             snapshot_date=snapshot_date,
-            target_versions=sorted(grouped),
+            target_versions=sort_target_versions(list(grouped)),
             snapshots_created=created,
             snapshots_updated=updated,
             item_count=item_count,
@@ -56,7 +59,7 @@ class SnapshotService:
 
     def target_versions(self) -> list[str]:
         rows = self.session.scalars(select(DefectSnapshot.target_version).distinct().order_by(DefectSnapshot.target_version)).all()
-        return list(rows)
+        return sort_target_versions(list(rows))
 
     def snapshot_count_for_date(self, snapshot_date: date) -> int:
         return int(
@@ -67,15 +70,16 @@ class SnapshotService:
         )
 
     def dashboard_rows(self, target_version: str, days: int | None = 30) -> list[SnapshotRow]:
+        query_versions = target_version_query_values(target_version)
         stmt: Select[tuple[DefectSnapshot]] = (
             select(DefectSnapshot)
-            .where(DefectSnapshot.target_version == target_version)
+            .where(DefectSnapshot.target_version.in_(query_versions))
             .order_by(DefectSnapshot.snapshot_date.asc())
         )
         if days:
             since = date.today() - timedelta(days=days - 1)
             stmt = stmt.where(DefectSnapshot.snapshot_date >= since)
-        snapshots = list(self.session.scalars(stmt).all())
+        snapshots = self._dedupe_snapshots_by_date(list(self.session.scalars(stmt).all()), target_version)
         rows: list[SnapshotRow] = []
         previous: DefectSnapshot | None = None
         for snapshot in snapshots:
@@ -88,10 +92,23 @@ class SnapshotService:
             previous = snapshot
         return rows
 
+    @staticmethod
+    def _dedupe_snapshots_by_date(snapshots: list[DefectSnapshot], target_version: str) -> list[DefectSnapshot]:
+        normalized_target = normalize_target_version(target_version)
+        by_date: dict[date, DefectSnapshot] = {}
+        for snapshot in snapshots:
+            current = by_date.get(snapshot.snapshot_date)
+            if not current:
+                by_date[snapshot.snapshot_date] = snapshot
+                continue
+            if normalize_target_version(snapshot.target_version) == normalized_target and snapshot.target_version == normalized_target:
+                by_date[snapshot.snapshot_date] = snapshot
+        return [by_date[snapshot_date] for snapshot_date in sorted(by_date)]
+
     def latest_snapshot(self, target_version: str) -> DefectSnapshot | None:
         return self.session.scalar(
             select(DefectSnapshot)
-            .where(DefectSnapshot.target_version == target_version)
+            .where(DefectSnapshot.target_version.in_(target_version_query_values(target_version)))
             .order_by(DefectSnapshot.snapshot_date.desc())
             .limit(1)
         )
@@ -120,7 +137,7 @@ class SnapshotService:
             )
             .join(DefectSnapshot)
             .where(
-                DefectSnapshot.target_version == target_version,
+                DefectSnapshot.target_version.in_(target_version_query_values(target_version)),
                 DefectSnapshotItem.notion_page_id.in_(notion_page_ids),
                 DefectSnapshotItem.status_group.in_(status_groups),
             )
@@ -144,7 +161,7 @@ class SnapshotService:
                 select(DefectSnapshotItem.notion_page_id)
                 .join(DefectSnapshot)
                 .where(
-                    DefectSnapshot.target_version == target_version,
+                    DefectSnapshot.target_version.in_(target_version_query_values(target_version)),
                     DefectSnapshot.snapshot_date < snapshot_date,
                 )
             ).all()
@@ -154,7 +171,7 @@ class SnapshotService:
                 select(DefectSnapshotItem.notion_page_id)
                 .join(DefectSnapshot)
                 .where(
-                    DefectSnapshot.target_version == target_version,
+                    DefectSnapshot.target_version.in_(target_version_query_values(target_version)),
                     DefectSnapshot.snapshot_date < snapshot_date,
                     DefectSnapshotItem.status_group == "resolved",
                 )
@@ -163,7 +180,7 @@ class SnapshotService:
         previous_latest = self.session.scalar(
             select(DefectSnapshot)
             .where(
-                DefectSnapshot.target_version == target_version,
+                DefectSnapshot.target_version.in_(target_version_query_values(target_version)),
                 DefectSnapshot.snapshot_date < snapshot_date,
             )
             .order_by(DefectSnapshot.snapshot_date.desc())

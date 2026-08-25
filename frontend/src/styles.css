@@ -112,11 +112,38 @@ button:disabled {
   background: #fff8c5;
 }
 
+.tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 4px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tabs button {
+  height: 34px;
+  border-color: transparent;
+  background: transparent;
+  font-weight: 750;
+}
+
+.tabs button.active {
+  border-color: #1f6feb;
+  background: #1f6feb;
+  color: #fff;
+}
+
 .kpis {
   display: grid;
   grid-template-columns: repeat(5, minmax(140px, 1fr));
   gap: 12px;
   margin: 18px 0;
+}
+
+.tc-kpis {
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
 }
 
 .kpi,
@@ -176,6 +203,49 @@ button:disabled {
   grid-template-columns: 1fr 1fr;
   gap: 14px;
   margin: 14px 0;
+}
+
+.empty-panel {
+  margin-top: 18px;
+  color: #57606a;
+}
+
+.progress-list {
+  display: grid;
+  gap: 14px;
+  padding: 10px 0 4px;
+}
+
+.progress-row {
+  display: grid;
+  gap: 7px;
+}
+
+.progress-row > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #57606a;
+  font-size: 12px;
+}
+
+.progress-row strong {
+  color: #24292f;
+  font-size: 14px;
+}
+
+.progress-track {
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid #d8dee4;
+  border-radius: 999px;
+  background: #f6f8fa;
+}
+
+.progress-track div {
+  height: 100%;
+  border-radius: inherit;
+  background: #1f6feb;
 }
 
 .table-wrap {
@@ -260,6 +330,10 @@ th {
   }
 
   .kpis {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .tc-kpis {
     grid-template-columns: repeat(2, minmax(140px, 1fr));
   }
 

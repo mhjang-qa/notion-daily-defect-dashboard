@@ -19,8 +19,9 @@ from .embed_renderer import GENERATED_EMBED_PATH, generate_hanpass_renewal_embed
 from .github_pages import publish_embed_html_to_github_pages
 from .notion_repository import NotionRepository
 from .scheduler import build_scheduler, collect_async, run_collection
-from .schemas import CollectResponse, DashboardResponse, SnapshotItemRow
+from .schemas import CollectResponse, DashboardResponse, SnapshotItemRow, TestCaseDashboardResponse
 from .snapshot_service import SnapshotService
+from .test_case_repository import DEFAULT_TEST_CASE_SOURCE_URL, TestCaseRepository
 
 
 settings = get_settings()
@@ -148,6 +149,15 @@ def dashboard(
 def snapshot_items(snapshot_id: int, session: Session = Depends(get_session)) -> list[SnapshotItemRow]:
     items = SnapshotService(session).snapshot_items(snapshot_id)
     return [SnapshotItemRow.model_validate(item) for item in items]
+
+
+@app.get("/api/test-cases", response_model=TestCaseDashboardResponse)
+async def test_cases() -> TestCaseDashboardResponse:
+    repo = TestCaseRepository(NotionRepository(settings))
+    try:
+        return await repo.dashboard(DEFAULT_TEST_CASE_SOURCE_URL)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 def _range_to_days(value: str) -> int | None:

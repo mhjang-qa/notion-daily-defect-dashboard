@@ -2,11 +2,16 @@ from app.github_pages import extract_snapshot_payload, merge_embed_html_snapshot
 from app.embed_renderer import generate_hanpass_renewal_embed, render_hanpass_renewal_embed
 
 
+NATIVE_VERSION = "[Hanpass][앱개편][Native]"
+BO_VERSION = "[Hanpass][앱개편][BO]"
+PLANNING_VERSION = "[Hanpass][앱개편][기획]"
+
+
 def row(snapshot_date: str, total_count: int) -> dict:
     return {
         "id": total_count,
         "snapshot_date": snapshot_date,
-        "target_version": "[Hanpass][앱개편]",
+        "target_version": NATIVE_VERSION,
         "total_count": total_count,
         "new_count": total_count,
         "in_progress_count": 0,
@@ -45,7 +50,7 @@ def test_merge_embed_html_snapshots_keeps_fresh_detail_items():
                         "status_group": "in_progress",
                         "severity": "High",
                         "priority": "P1",
-                        "target_version": "[Hanpass][앱개편]",
+                        "target_version": NATIVE_VERSION,
                         "notion_created_at": None,
                         "notion_last_edited_at": None,
                         "url": "https://notion.so/page-1",
@@ -62,6 +67,34 @@ def test_merge_embed_html_snapshots_keeps_fresh_detail_items():
     assert payload is not None
     assert [item["title"] for item in payload["groups"][0]["items"]] == ["로그인 오류"]
     assert [row["snapshot_date"] for row in payload["groups"][0]["rows"]] == ["2026-08-20", "2026-08-21"]
+    assert payload["groups"][0]["version"] == NATIVE_VERSION
+    assert payload["groups"][0]["rows"][0]["target_version"] == NATIVE_VERSION
+    assert payload["groups"][0]["items"][0]["target_version"] == NATIVE_VERSION
+
+
+def test_merge_embed_html_snapshots_sorts_hanpass_renewal_versions():
+    existing_html = render_hanpass_renewal_embed(
+        [
+            {"version": "[Hanpass][앱개편]", "rows": [row("2026-08-20", 25)], "items": []},
+            {"version": BO_VERSION, "rows": [row("2026-08-20", 10)], "items": []},
+        ],
+        "2026-08-20T10:00:00+09:00",
+    )
+    fresh_html = render_hanpass_renewal_embed(
+        [
+            {"version": BO_VERSION, "rows": [row("2026-08-21", 11)], "items": []},
+            {"version": PLANNING_VERSION, "rows": [row("2026-08-21", 3)], "items": []},
+            {"version": NATIVE_VERSION, "rows": [row("2026-08-21", 31)], "items": []},
+        ],
+        "2026-08-21T10:00:00+09:00",
+    )
+
+    merged = merge_embed_html_snapshots(existing_html, fresh_html)
+    payload = extract_snapshot_payload(merged)
+
+    assert [group["version"] for group in payload["groups"]] == [NATIVE_VERSION, BO_VERSION, PLANNING_VERSION]
+    assert "[Hanpass][앱개편], [Hanpass][앱개편][BO] 전용 Notion Embed" not in merged
+    assert "[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in merged
 
 
 def test_generate_embed_serializes_snapshot_items(monkeypatch, tmp_path):
@@ -72,7 +105,7 @@ def test_generate_embed_serializes_snapshot_items(monkeypatch, tmp_path):
         status_group = "in_progress"
         severity = "High"
         priority = "P1"
-        target_version = "[Hanpass][앱개편]"
+        target_version = NATIVE_VERSION
         notion_created_at = None
         notion_last_edited_at = None
         url = "https://notion.so/page-1"
@@ -99,3 +132,19 @@ def test_generate_embed_serializes_snapshot_items(monkeypatch, tmp_path):
 
     assert payload["groups"][0]["items"][0]["title"] == "로그인 오류"
     assert payload["groups"][0]["items"][0]["resolved_first_seen_date"] == "2026-08-21"
+
+
+def test_hanpass_renewal_embed_renders_three_target_versions():
+    html = render_hanpass_renewal_embed(
+        [
+            {"version": NATIVE_VERSION, "rows": [row("2026-08-24", 2)], "items": []},
+            {"version": BO_VERSION, "rows": [row("2026-08-24", 1)], "items": []},
+            {"version": PLANNING_VERSION, "rows": [row("2026-08-24", 3)], "items": []},
+        ],
+        "2026-08-24T17:33:00+09:00",
+    )
+    payload = extract_snapshot_payload(html)
+
+    assert [group["version"] for group in payload["groups"]] == [NATIVE_VERSION, BO_VERSION, PLANNING_VERSION]
+    assert "[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in html
+    assert 'if (version === "[Hanpass][앱개편][기획]") return "기획";' in html

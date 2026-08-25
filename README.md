@@ -96,7 +96,7 @@ DATABASE_URL=sqlite:////tmp/defects.db
 - `/`: React Dashboard
 - `/api/health`: 서버 상태
 - `/api/collect`: 수동 Snapshot 수집
-- `/embed/hanpass-renewal`: `[Hanpass][앱개편]`, `[Hanpass][앱개편][BO]` 전용 Notion Embed 정적 HTML
+- `/embed/hanpass-renewal`: `[Hanpass][앱개편][Native]`, `[Hanpass][앱개편][BO]`, `[Hanpass][앱개편][기획]` 전용 Notion Embed 정적 HTML
 - `/embed/hanpass-renewal-admin`: Notion 수집 후 Embed 정적 HTML을 재생성하고 GitHub Pages에 반영하는 관리자 페이지
 - `/api/embed/hanpass-renewal/sync`: 관리자 동기화 API. `GITHUB_PAGES_TOKEN`이 설정되어 있으면 GitHub Pages HTML 파일까지 commit 업데이트합니다.
 
