@@ -4,7 +4,13 @@ import asyncio
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.test_case_repository import TestCaseRepository as TcRepository, linked_notion_ids_from_block, normalize_tc_result, platform_results
+from app.test_case_repository import (
+    TestCaseRepository as TcRepository,
+    aggregate_row_status,
+    linked_notion_ids_from_block,
+    normalize_tc_result,
+    platform_results,
+)
 
 
 def test_normalize_tc_result_counts_blank_as_not_started():
@@ -13,6 +19,13 @@ def test_normalize_tc_result_counts_blank_as_not_started():
     assert normalize_tc_result("FAIL") == "fail"
     assert normalize_tc_result("N/A") == "na"
     assert normalize_tc_result("확인 필요") == "other"
+
+
+def test_aggregate_row_status_counts_tc_row_once():
+    assert aggregate_row_status(["pass", "na"]) == "pass"
+    assert aggregate_row_status(["pass", "fail"]) == "fail"
+    assert aggregate_row_status(["pass", "not_started"]) == "not_started"
+    assert aggregate_row_status(["na", "na"]) == "na"
 
 
 def test_platform_results_detects_os_result_columns():
@@ -244,9 +257,10 @@ def test_dashboard_keeps_database_rows_when_block_children_lookup_fails():
 
     result = asyncio.run(repo.dashboard("https://app.notion.com/p/3a773fbd195180af93ddc50099a7df6c"))
 
-    assert result.summary.total_count == 2
-    assert result.summary.pass_count == 1
+    assert result.summary.total_count == 1
     assert result.summary.not_started_count == 1
+    assert result.platforms[0].total_count == 1
+    assert result.platforms[1].total_count == 1
 
 
 def test_dashboard_collects_from_explicit_nested_source_urls():
@@ -313,5 +327,5 @@ def test_dashboard_traverses_non_test_database_rows_to_nested_test_cases():
 
     assert result.summary.total_count == 1
     assert result.summary.na_count == 1
-    assert result.pages[0].page_name == "iOS 테스트케이스"
+    assert result.pages[0].page_name == "BO 상세"
     assert result.platforms[0].platform == "iOS"

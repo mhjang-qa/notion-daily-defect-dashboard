@@ -52,7 +52,7 @@ class TestCaseRepository:
             raise RuntimeError("테스트케이스 데이터를 찾지 못했습니다. Notion integration 공유 또는 원본 테스트케이스 DB 링크를 확인하세요.")
         page_buckets: dict[str, list[dict[str, str]]] = defaultdict(list)
         for row in rows:
-            page_buckets[row.get("_page_name") or "테스트케이스"].append(row)
+            page_buckets[row.get("_group_name") or row.get("_page_name") or "테스트케이스"].append(row)
 
         pages = [self._page_stats(page_name, page_rows) for page_name, page_rows in sorted(page_buckets.items())]
         platform_totals: dict[str, TestCaseStatusCounts] = defaultdict(TestCaseStatusCounts)
@@ -134,6 +134,7 @@ class TestCaseRepository:
         depth: int = 7,
         visited: set[str] | None = None,
         try_database: bool = True,
+        group_name: str = "",
     ) -> list[dict[str, str]]:
         if depth <= 0:
             return []
@@ -150,13 +151,14 @@ class TestCaseRepository:
                 for page in pages:
                     row = page_to_row(page)
                     row["_page_name"] = page_name
+                    row["_group_name"] = group_name or page_name
                     row["_row_id"] = page.get("id", "")
                     if looks_like_test_case_row(row):
                         rows.append(row)
                 if rows:
                     return rows
                 if pages:
-                    return await self._collect_page_rows(pages, page_name, depth, visited)
+                    return await self._collect_page_rows(pages, page_name, depth, visited, group_name)
             except Exception:
                 pass
 
@@ -178,28 +180,29 @@ class TestCaseRepository:
                 for page in database_pages:
                     row = page_to_row(page)
                     row["_page_name"] = title
+                    row["_group_name"] = group_name or title
                     row["_row_id"] = page.get("id", "")
                     if looks_like_test_case_row(row):
                         database_rows.append(row)
                 if database_rows:
                     rows.extend(database_rows)
                 else:
-                    rows.extend(await self._collect_page_rows(database_pages, title, depth, visited))
+                    rows.extend(await self._collect_page_rows(database_pages, title, depth, visited, group_name or page_name))
             elif block_type == "child_page":
                 title = (block.get("child_page") or {}).get("title") or page_name
-                rows.extend(await self._collect_rows(block_id, title, depth - 1, visited))
+                rows.extend(await self._collect_rows(block_id, title, depth - 1, visited, group_name=group_name))
             elif block_type == "table":
-                rows.extend(await self._table_rows(block_id, page_name))
+                rows.extend(await self._table_rows(block_id, page_name, group_name))
             elif block_type == "link_to_page":
                 link = block.get("link_to_page") or {}
                 linked_id = link.get("page_id") or link.get("database_id")
                 if linked_id:
-                    rows.extend(await self._collect_rows(linked_id, page_name, depth - 1, visited))
+                    rows.extend(await self._collect_rows(linked_id, page_name, depth - 1, visited, group_name=group_name))
             for linked_id in linked_notion_ids_from_block(block):
                 linked_page_name = linked_page_name_from_block(block, page_name)
-                rows.extend(await self._collect_rows(linked_id, linked_page_name, depth - 1, visited))
+                rows.extend(await self._collect_rows(linked_id, linked_page_name, depth - 1, visited, group_name=group_name))
             if block.get("has_children"):
-                rows.extend(await self._collect_rows(block_id, page_name, depth - 1, visited, try_database=False))
+                rows.extend(await self._collect_rows(block_id, page_name, depth - 1, visited, try_database=False, group_name=group_name))
         return rows
 
     async def _collect_page_rows(
@@ -208,11 +211,20 @@ class TestCaseRepository:
         fallback_page_name: str,
         depth: int,
         visited: set[str],
+        group_name: str,
     ) -> list[dict[str, str]]:
         async def collect(page: dict[str, Any]) -> list[dict[str, str]]:
             async with self._traversal_semaphore:
                 child_page_name = page_name_from_page(page) or fallback_page_name
-                return await self._collect_rows(page.get("id", ""), child_page_name, depth - 1, visited, try_database=False)
+                child_group_name = group_name or child_page_name
+                return await self._collect_rows(
+                    page.get("id", ""),
+                    child_page_name,
+                    depth - 1,
+                    visited,
+                    try_database=False,
+                    group_name=child_group_name,
+                )
 
         chunks = await asyncio.gather(*(collect(page) for page in pages if page.get("id")), return_exceptions=True)
         rows: list[dict[str, str]] = []
@@ -254,7 +266,7 @@ class TestCaseRepository:
                 break
         return children
 
-    async def _table_rows(self, table_block_id: str, page_name: str) -> list[dict[str, str]]:
+    async def _table_rows(self, table_block_id: str, page_name: str, group_name: str = "") -> list[dict[str, str]]:
         rows = []
         blocks = await self._block_children(table_block_id)
         headers: list[str] = []
@@ -268,6 +280,7 @@ class TestCaseRepository:
                 continue
             row = {headers[i] if i < len(headers) and headers[i] else f"컬럼{i + 1}": value for i, value in enumerate(values)}
             row["_page_name"] = page_name
+            row["_group_name"] = group_name or page_name
             row["_row_id"] = f"{table_block_id}:{index}"
             if looks_like_test_case_row(row):
                 rows.append(row)
@@ -277,10 +290,12 @@ class TestCaseRepository:
         platform_counts: dict[str, TestCaseStatusCounts] = defaultdict(TestCaseStatusCounts)
         page_counts = TestCaseStatusCounts()
         for row in rows:
-            for platform, raw_result in platform_results(row, page_name):
+            row_statuses = []
+            for platform, raw_result in platform_results(row, row.get("_page_name") or page_name):
                 status = normalize_tc_result(raw_result)
+                row_statuses.append(status)
                 add_status(platform_counts[platform], status)
-                add_status(page_counts, status)
+            add_status(page_counts, aggregate_row_status(row_statuses))
         return TestCasePageStats(
             page_name=page_name,
             **finalize_counts(page_counts).model_dump(),
@@ -572,6 +587,20 @@ def normalize_tc_result(value: str) -> str:
     if key in {"NA", "N/A", "NONE", "NULL", "해당없음", "해당무", "제외", "미대상"} or clean in {"NA", "NAN"}:
         return "na"
     return "other"
+
+
+def aggregate_row_status(statuses: list[str]) -> str:
+    if not statuses:
+        return "not_started"
+    if "fail" in statuses:
+        return "fail"
+    if "not_started" in statuses:
+        return "not_started"
+    if "other" in statuses:
+        return "other"
+    if all(status == "na" for status in statuses):
+        return "na"
+    return "pass"
 
 
 def status_from_status_columns(row: dict[str, str]) -> str:
