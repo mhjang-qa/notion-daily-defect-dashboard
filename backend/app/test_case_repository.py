@@ -13,6 +13,13 @@ DEFAULT_TEST_CASE_SOURCE_URL = (
     "https://app.notion.com/p/3a773fbd195180af93ddc50099a7df6c"
     "?v=dae73fbd1951832d8e5908953dad8da6&source=copy_link"
 )
+DEFAULT_TEST_CASE_SOURCE_URLS = (
+    DEFAULT_TEST_CASE_SOURCE_URL,
+    "https://app.notion.com/p/BO-3a773fbd1951803e8d90dde852fb46ff"
+    "?v=dae73fbd1951832d8e5908953dad8da6&source=copy_link",
+    "https://app.notion.com/p/3a773fbd195180aaa2e2d3011a1fe1a6"
+    "?v=dae73fbd1951832d8e5908953dad8da6&source=copy_link",
+)
 
 PLATFORM_ALIASES = {
     "AOS": ("AOS", "Android", "ANDROID", "안드로이드"),
@@ -29,16 +36,22 @@ class TestCaseRepository:
     def __init__(self, notion: NotionRepository):
         self.notion = notion
 
-    async def dashboard(self, source_url: str = DEFAULT_TEST_CASE_SOURCE_URL) -> TestCaseDashboardResponse:
+    async def dashboard(
+        self,
+        source_url: str = DEFAULT_TEST_CASE_SOURCE_URL,
+        source_urls: tuple[str, ...] = DEFAULT_TEST_CASE_SOURCE_URLS,
+    ) -> TestCaseDashboardResponse:
         rows = []
         seen_row_keys = set()
-        source_id = parse_notion_id(source_url)
-        for row in await self._collect_rows(source_id, "테스트케이스"):
-            key = row_identity(row)
-            if key in seen_row_keys:
-                continue
-            seen_row_keys.add(key)
-            rows.append(row)
+        for current_source_url in source_urls or (source_url,):
+            source_id = parse_notion_id(current_source_url)
+            page_name = source_page_name(current_source_url) or "테스트케이스"
+            for row in await self._collect_rows(source_id, page_name):
+                key = row_identity(row)
+                if key in seen_row_keys:
+                    continue
+                seen_row_keys.add(key)
+                rows.append(row)
         if not rows:
             raise RuntimeError("테스트케이스 데이터를 찾지 못했습니다. Notion integration 공유 또는 원본 테스트케이스 DB 링크를 확인하세요.")
         page_buckets: dict[str, list[dict[str, str]]] = defaultdict(list)
@@ -131,7 +144,7 @@ class TestCaseRepository:
             pages = await self._query_database(notion_id)
             for page in pages:
                 row = page_to_row(page)
-                row["_page_name"] = page_name_from_page(page) or page_name
+                row["_page_name"] = page_name
                 row["_row_id"] = page.get("id", "")
                 if looks_like_test_case_row(row):
                     rows.append(row)
@@ -268,6 +281,15 @@ def row_identity(row: dict[str, str]) -> str:
     if row.get("_row_id"):
         return row["_row_id"]
     return "|".join(f"{key}={value}" for key, value in sorted(row.items()) if not key.startswith("_"))
+
+
+def source_page_name(value: str) -> str:
+    match = re.search(r"/p/([^/?#]+)", value or "")
+    if not match:
+        return ""
+    slug = match.group(1)
+    clean = re.sub(r"-?[0-9a-fA-F]{32}$", "", slug).strip("-")
+    return clean.replace("-", " ").strip()
 
 
 def safe_error(exc: Exception) -> str:

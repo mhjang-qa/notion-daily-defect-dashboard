@@ -96,6 +96,30 @@ class FakeDatabaseNotion:
         raise RuntimeError("block children are unavailable for database ids")
 
 
+class FakeNestedSourceNotion:
+    settings = SimpleNamespace(tz=ZoneInfo("Asia/Seoul"))
+
+    async def _request(self, method: str, path: str, **kwargs):
+        if method == "POST" and path == "/databases/00000000-0000-0000-0000-000000000001/query":
+            return {"results": [], "has_more": False}
+        if method == "GET" and path.startswith("/blocks/00000000-0000-0000-0000-000000000001/children"):
+            return {"results": [], "has_more": False}
+        if method == "POST" and path == "/databases/00000000-0000-0000-0000-000000000002/query":
+            return {
+                "results": [
+                    {
+                        "id": "os-row-1",
+                        "properties": {
+                            "Test Case": title_prop("TC-001"),
+                            "Result": select_prop("PASS"),
+                        },
+                    }
+                ],
+                "has_more": False,
+            }
+        raise RuntimeError(path)
+
+
 def test_dashboard_keeps_database_rows_when_block_children_lookup_fails():
     repo = TcRepository(FakeDatabaseNotion())
 
@@ -104,3 +128,21 @@ def test_dashboard_keeps_database_rows_when_block_children_lookup_fails():
     assert result.summary.total_count == 2
     assert result.summary.pass_count == 1
     assert result.summary.not_started_count == 1
+
+
+def test_dashboard_collects_from_explicit_nested_source_urls():
+    repo = TcRepository(FakeNestedSourceNotion())
+
+    result = asyncio.run(
+        repo.dashboard(
+            "https://app.notion.com/p/root-id",
+            source_urls=(
+                "https://app.notion.com/p/00000000000000000000000000000001",
+                "https://app.notion.com/p/AOS-00000000000000000000000000000002",
+            ),
+        )
+    )
+
+    assert result.summary.total_count == 1
+    assert result.summary.pass_count == 1
+    assert result.platforms[0].platform == "AOS"
