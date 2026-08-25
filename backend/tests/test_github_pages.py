@@ -148,3 +148,44 @@ def test_hanpass_renewal_embed_renders_three_target_versions():
     assert [group["version"] for group in payload["groups"]] == [NATIVE_VERSION, BO_VERSION, PLANNING_VERSION]
     assert "[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in html
     assert 'if (version === "[Hanpass][앱개편][기획]") return "기획";' in html
+
+
+def test_hanpass_renewal_embed_embeds_test_case_snapshot_without_fetch():
+    html = render_hanpass_renewal_embed(
+        [{"version": NATIVE_VERSION, "rows": [row("2026-08-24", 2)], "items": []}],
+        "2026-08-24T17:33:00+09:00",
+        test_cases={
+            "summary": {
+                "total_count": 10,
+                "pass_count": 7,
+                "fail_count": 1,
+                "na_count": 1,
+                "not_started_count": 1,
+                "other_count": 0,
+                "progress_rate": 90.0,
+            },
+            "platforms": [],
+            "pages": [],
+        },
+    )
+    payload = extract_snapshot_payload(html)
+
+    assert payload["testCases"]["summary"]["total_count"] == 10
+    assert "/api/test-cases" not in html
+
+
+def test_merge_embed_html_snapshots_uses_fresh_test_case_snapshot():
+    existing_html = render_hanpass_renewal_embed(
+        [{"version": NATIVE_VERSION, "rows": [row("2026-08-20", 2)], "items": []}],
+        "2026-08-20T10:00:00+09:00",
+        test_cases={"summary": {"total_count": 1}, "platforms": [], "pages": []},
+    )
+    fresh_html = render_hanpass_renewal_embed(
+        [{"version": NATIVE_VERSION, "rows": [row("2026-08-21", 3)], "items": []}],
+        "2026-08-21T10:00:00+09:00",
+        test_cases={"summary": {"total_count": 20}, "platforms": [], "pages": []},
+    )
+
+    payload = extract_snapshot_payload(merge_embed_html_snapshots(existing_html, fresh_html))
+
+    assert payload["testCases"]["summary"]["total_count"] == 20

@@ -23,7 +23,7 @@ TARGET_VERSIONS = HANPASS_RENEWAL_TARGET_VERSIONS
 GENERATED_EMBED_PATH = Path(os.environ.get("HANPASS_RENEWAL_EMBED_PATH", "/tmp/hanpass-renewal.html"))
 
 
-def generate_hanpass_renewal_embed(session: Session) -> Path:
+def generate_hanpass_renewal_embed(session: Session, test_cases: dict | None = None) -> Path:
     settings = get_settings()
     service = SnapshotService(session)
     groups = []
@@ -48,13 +48,13 @@ def generate_hanpass_renewal_embed(session: Session) -> Path:
         )
     generated_at = datetime.now(settings.tz).isoformat()
     GENERATED_EMBED_PATH.parent.mkdir(parents=True, exist_ok=True)
-    GENERATED_EMBED_PATH.write_text(render_hanpass_renewal_embed(groups, generated_at), encoding="utf-8")
+    GENERATED_EMBED_PATH.write_text(render_hanpass_renewal_embed(groups, generated_at, test_cases=test_cases), encoding="utf-8")
     return GENERATED_EMBED_PATH
 
 
-def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
+def render_hanpass_renewal_embed(groups: list[dict], generated_at: str, test_cases: dict | None = None) -> str:
     settings = get_settings()
-    payload = json.dumps({"groups": groups, "generatedAt": generated_at}, ensure_ascii=False)
+    payload = json.dumps({"groups": groups, "generatedAt": generated_at, "testCases": test_cases}, ensure_ascii=False)
     escaped_payload = payload.replace("</", "<\\/")
     render_origin = settings.render_public_origin.rstrip("/")
     return f"""<!doctype html>
@@ -234,15 +234,11 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str) -> str:
       async function loadTestCases() {{
         if (tcLoaded) return;
         tcLoaded = true;
-        tcSummary.innerHTML = `<article class="card"><span>테스트케이스</span><strong>...</strong></article>`;
-        tcDetails.innerHTML = `<article class="tc-panel"><p class="empty">테스트케이스 현황을 불러오는 중입니다.</p></article>`;
-        try {{
-          const response = await fetch(`${{ADMIN_ORIGIN}}/api/test-cases`);
-          if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
-          renderTestCases(await response.json());
-        }} catch (error) {{
+        if (DATA.testCases) {{
+          renderTestCases(DATA.testCases);
+        }} else {{
           tcSummary.innerHTML = "";
-          tcDetails.innerHTML = `<article class="tc-panel"><p class="empty">테스트케이스 데이터를 찾지 못했습니다. Notion 공유 또는 원본 DB 링크를 확인하세요.</p></article>`;
+          tcDetails.innerHTML = `<article class="tc-panel"><p class="empty">아직 생성된 테스트케이스 스냅샷이 없습니다. 관리자 동기화 후 다시 확인하세요.</p></article>`;
         }}
       }}
 

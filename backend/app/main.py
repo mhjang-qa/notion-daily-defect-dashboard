@@ -18,7 +18,7 @@ from .database import SessionLocal, get_session, init_db
 from .embed_renderer import GENERATED_EMBED_PATH, generate_hanpass_renewal_embed, render_admin_page
 from .github_pages import publish_embed_html_to_github_pages
 from .notion_repository import NotionRepository
-from .scheduler import build_scheduler, collect_async, run_collection
+from .scheduler import build_scheduler, collect_async, run_collection_and_publish_embed
 from .schemas import CollectResponse, DashboardResponse, SnapshotItemRow, TestCaseDashboardResponse
 from .snapshot_service import SnapshotService
 from .test_case_repository import DEFAULT_TEST_CASE_SOURCE_URL, TestCaseRepository
@@ -87,8 +87,9 @@ async def target_versions(session: Session = Depends(get_session)) -> dict[str, 
 async def collect_now() -> CollectResponse:
     try:
         result = await collect_async(settings)
+        test_cases = await collect_test_case_snapshot()
         with SessionLocal() as session:
-            generate_hanpass_renewal_embed(session)
+            generate_hanpass_renewal_embed(session, test_cases=test_cases)
         return result
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -99,8 +100,9 @@ async def sync_hanpass_renewal_embed(request: Request) -> dict[str, str | bool]:
     require_embed_admin(request)
     try:
         await collect_async(settings)
+        test_cases = await collect_test_case_snapshot()
         with SessionLocal() as session:
-            generated_path = generate_hanpass_renewal_embed(session)
+            generated_path = generate_hanpass_renewal_embed(session, test_cases=test_cases)
         publish_result = await publish_embed_html_to_github_pages(settings, generated_path)
         return {
             "ok": True,
@@ -160,6 +162,12 @@ async def test_cases() -> TestCaseDashboardResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+async def collect_test_case_snapshot() -> dict:
+    repo = TestCaseRepository(NotionRepository(settings))
+    result = await repo.dashboard(DEFAULT_TEST_CASE_SOURCE_URL)
+    return result.model_dump(mode="json")
+
+
 def _range_to_days(value: str) -> int | None:
     if value == "all":
         return None
@@ -216,7 +224,7 @@ def _collect_missing_today_snapshot() -> None:
         if SnapshotService(session).snapshot_count_for_date(today):
             return
     try:
-        run_collection(settings)
+        run_collection_and_publish_embed(settings)
     except Exception:
         pass
 

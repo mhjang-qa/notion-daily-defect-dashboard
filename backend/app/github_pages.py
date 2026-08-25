@@ -110,7 +110,8 @@ def merge_embed_html_snapshots(existing_html: str, fresh_html: str) -> str:
         )
 
     generated_at = fresh.get("generatedAt") or existing.get("generatedAt") or ""
-    return render_hanpass_renewal_embed(merged_groups, generated_at)
+    test_cases = fresh.get("testCases") or existing.get("testCases")
+    return render_hanpass_renewal_embed(merged_groups, generated_at, test_cases=test_cases)
 
 
 def extract_snapshot_payload(html: str) -> dict | None:
