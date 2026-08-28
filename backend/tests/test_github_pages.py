@@ -149,7 +149,11 @@ def test_hanpass_renewal_embed_renders_three_target_versions():
     assert "[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in html
     assert 'if (version === "[Hanpass][앱개편][기획]") return "기획";' in html
     assert "grid-template-columns: repeat(4, minmax(120px, 1fr));" in html
+    assert "version-table-wrap" in html
+    assert "max-height: 166px;" in html
+    assert ".chart-box { width: 100%; height: 210px; }" in html
     assert "function chartScales(rows, keys, minRoundedMax = 4)" in html
+    assert "const height = 220;" in html
     assert "const scale = chartScales(rows, series.map(([key]) => key), 300);" in html
 
 
