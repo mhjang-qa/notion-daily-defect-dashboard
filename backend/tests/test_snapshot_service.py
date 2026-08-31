@@ -110,17 +110,20 @@ def test_collect_normalizes_hanpass_renewal_versions():
         [
             record("a", "unresolved", "[Hanpass][앱개편]"),
             record("b", "unresolved", "[Hanpass][앱개편][BO], [Hanpass][앱개편][기획]"),
+            record("c", "unresolved", "[Hanpass][앱개편][Native]-LiveTest"),
         ],
         date(2026, 8, 24),
         now,
     )
 
     assert result.target_versions == [
-        "[Hanpass][앱개편][Native]",
+        "[Hanpass][앱개편][Native]-Dev",
+        "[Hanpass][앱개편][Native]-LiveTest",
         "[Hanpass][앱개편][BO]",
         "[Hanpass][앱개편][기획]",
     ]
-    assert service.dashboard_rows("[Hanpass][앱개편][Native]", None)[0].total_count == 1
+    assert service.dashboard_rows("[Hanpass][앱개편][Native]-Dev", None)[0].total_count == 1
+    assert service.dashboard_rows("[Hanpass][앱개편][Native]-LiveTest", None)[0].total_count == 1
     assert service.dashboard_rows("[Hanpass][앱개편][BO]", None)[0].total_count == 1
     assert service.dashboard_rows("[Hanpass][앱개편][기획]", None)[0].total_count == 1
 
@@ -133,7 +136,7 @@ def test_native_dashboard_rows_include_legacy_history_without_duplicate_dates():
     service.collect([record("a", "unresolved", "[Hanpass][앱개편]")], date(2026, 8, 23), now)
     service.collect([record("a", "unresolved", "[Hanpass][앱개편][Native]")], date(2026, 8, 24), now)
 
-    rows = service.dashboard_rows("[Hanpass][앱개편][Native]", None)
+    rows = service.dashboard_rows("[Hanpass][앱개편][Native]-Dev", None)
 
     assert [row.snapshot_date for row in rows] == [date(2026, 8, 23), date(2026, 8, 24)]
 

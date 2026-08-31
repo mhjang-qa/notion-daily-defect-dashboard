@@ -2,7 +2,8 @@ from app.github_pages import extract_snapshot_payload, merge_embed_html_snapshot
 from app.embed_renderer import generate_hanpass_renewal_embed, render_hanpass_renewal_embed
 
 
-NATIVE_VERSION = "[Hanpass][앱개편][Native]"
+NATIVE_VERSION = "[Hanpass][앱개편][Native]-Dev"
+LIVE_VERSION = "[Hanpass][앱개편][Native]-LiveTest"
 BO_VERSION = "[Hanpass][앱개편][BO]"
 PLANNING_VERSION = "[Hanpass][앱개편][기획]"
 
@@ -84,6 +85,7 @@ def test_merge_embed_html_snapshots_sorts_hanpass_renewal_versions():
         [
             {"version": BO_VERSION, "rows": [row("2026-08-21", 11)], "items": []},
             {"version": PLANNING_VERSION, "rows": [row("2026-08-21", 3)], "items": []},
+            {"version": LIVE_VERSION, "rows": [row("2026-08-21", 5)], "items": []},
             {"version": NATIVE_VERSION, "rows": [row("2026-08-21", 31)], "items": []},
         ],
         "2026-08-21T10:00:00+09:00",
@@ -92,9 +94,9 @@ def test_merge_embed_html_snapshots_sorts_hanpass_renewal_versions():
     merged = merge_embed_html_snapshots(existing_html, fresh_html)
     payload = extract_snapshot_payload(merged)
 
-    assert [group["version"] for group in payload["groups"]] == [NATIVE_VERSION, BO_VERSION, PLANNING_VERSION]
+    assert [group["version"] for group in payload["groups"]] == [NATIVE_VERSION, LIVE_VERSION, BO_VERSION, PLANNING_VERSION]
     assert "[Hanpass][앱개편], [Hanpass][앱개편][BO] 전용 Notion Embed" not in merged
-    assert "[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in merged
+    assert "[Hanpass][앱개편][Native]-Dev, [Hanpass][앱개편][Native]-LiveTest, [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in merged
 
 
 def test_generate_embed_serializes_snapshot_items(monkeypatch, tmp_path):
@@ -134,10 +136,11 @@ def test_generate_embed_serializes_snapshot_items(monkeypatch, tmp_path):
     assert payload["groups"][0]["items"][0]["resolved_first_seen_date"] == "2026-08-21"
 
 
-def test_hanpass_renewal_embed_renders_three_target_versions():
+def test_hanpass_renewal_embed_renders_target_versions_with_native_pair_first():
     html = render_hanpass_renewal_embed(
         [
             {"version": NATIVE_VERSION, "rows": [row("2026-08-24", 2)], "items": []},
+            {"version": LIVE_VERSION, "rows": [row("2026-08-24", 4)], "items": []},
             {"version": BO_VERSION, "rows": [row("2026-08-24", 1)], "items": []},
             {"version": PLANNING_VERSION, "rows": [row("2026-08-24", 3)], "items": []},
         ],
@@ -145,8 +148,10 @@ def test_hanpass_renewal_embed_renders_three_target_versions():
     )
     payload = extract_snapshot_payload(html)
 
-    assert [group["version"] for group in payload["groups"]] == [NATIVE_VERSION, BO_VERSION, PLANNING_VERSION]
-    assert "[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in html
+    assert [group["version"] for group in payload["groups"]] == [NATIVE_VERSION, LIVE_VERSION, BO_VERSION, PLANNING_VERSION]
+    assert "[Hanpass][앱개편][Native]-Dev, [Hanpass][앱개편][Native]-LiveTest, [Hanpass][앱개편][BO], [Hanpass][앱개편][기획]" in html
+    assert 'if (version === "[Hanpass][앱개편][Native]-Dev") return "Native-Dev";' in html
+    assert 'if (version === "[Hanpass][앱개편][Native]-LiveTest") return "Native-Live";' in html
     assert 'if (version === "[Hanpass][앱개편][기획]") return "기획";' in html
     assert "grid-template-columns: repeat(4, minmax(120px, 1fr));" in html
     assert "version-table-wrap" in html

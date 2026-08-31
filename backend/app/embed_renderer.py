@@ -14,6 +14,7 @@ from .snapshot_service import SnapshotService
 from .target_versions import (
     HANPASS_RENEWAL_BO,
     HANPASS_RENEWAL_NATIVE,
+    HANPASS_RENEWAL_NATIVE_LIVETEST,
     HANPASS_RENEWAL_PLANNING,
     HANPASS_RENEWAL_TARGET_VERSIONS,
 )
@@ -159,7 +160,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str, test_cas
       <header class="topbar">
         <div>
           <h1>Hanpass 앱개편 결함 현황</h1>
-          <p class="subtitle">[Hanpass][앱개편][Native], [Hanpass][앱개편][BO], [Hanpass][앱개편][기획] 전용 Notion Embed</p>
+          <p class="subtitle">[Hanpass][앱개편][Native]-Dev, [Hanpass][앱개편][Native]-LiveTest, [Hanpass][앱개편][BO], [Hanpass][앱개편][기획] 전용 Notion Embed</p>
         </div>
         <div class="top-actions">
           <nav class="tabs" aria-label="dashboard tabs">
@@ -394,7 +395,8 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str, test_cas
       }}
 
       function groupLabel(version) {{
-        if (version === "{HANPASS_RENEWAL_NATIVE}") return "Native";
+        if (version === "{HANPASS_RENEWAL_NATIVE}") return "Native-Dev";
+        if (version === "{HANPASS_RENEWAL_NATIVE_LIVETEST}") return "Native-Live";
         if (version === "{HANPASS_RENEWAL_BO}") return "BO";
         if (version === "{HANPASS_RENEWAL_PLANNING}") return "기획";
         return version;
@@ -528,7 +530,7 @@ def render_hanpass_renewal_embed(groups: list[dict], generated_at: str, test_cas
             <div class="section-head">
               <div>
                 <h2>심각도별 결함 상세</h2>
-                <p>최신 Snapshot 기준, Native/BO/기획 결함을 심각도 등급별로 분류합니다.</p>
+                <p>최신 Snapshot 기준, Native Dev/Live, BO/기획 결함을 심각도 등급별로 분류합니다.</p>
               </div>
               <p>총 ${{items.length}}건</p>
             </div>
