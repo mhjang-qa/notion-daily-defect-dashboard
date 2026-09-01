@@ -157,6 +157,10 @@ def test_hanpass_renewal_embed_renders_target_versions_with_native_pair_first():
     assert "severity-breakdown-grid" in html
     assert "잔여 결함 상세" in html
     assert 'const openItems = items.filter((item) => !["resolved", "qa_verified"].includes(item.status_group));' in html
+    assert ".severity-card.severity-critical" in html
+    assert ".severity-card.severity-major" in html
+    assert ".severity-card.severity-minor" in html
+    assert "function severityClass(value)" in html
     assert "version-table-wrap" in html
     assert "max-height: 166px;" in html
     assert ".chart-box { width: 100%; height: 210px; }" in html
