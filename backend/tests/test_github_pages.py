@@ -154,6 +154,9 @@ def test_hanpass_renewal_embed_renders_target_versions_with_native_pair_first():
     assert 'if (version === "[Hanpass][앱개편][Native]-LiveTest") return "Native-Live";' in html
     assert 'if (version === "[Hanpass][앱개편][기획]") return "기획";' in html
     assert "grid-template-columns: repeat(4, minmax(120px, 1fr));" in html
+    assert "severity-breakdown-grid" in html
+    assert "잔여 결함 상세" in html
+    assert 'const openItems = items.filter((item) => !["resolved", "qa_verified"].includes(item.status_group));' in html
     assert "version-table-wrap" in html
     assert "max-height: 166px;" in html
     assert ".chart-box { width: 100%; height: 210px; }" in html
