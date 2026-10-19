@@ -43,6 +43,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+FRONTEND_HTML_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
 frontend_dist = settings.frontend_dist_path
 assets_dir = frontend_dist / "assets"
 if assets_dir.exists():
@@ -180,13 +186,13 @@ def _range_to_days(value: str) -> int | None:
 def index():
     index_path = settings.frontend_dist_path / "index.html"
     if index_path.exists():
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers=FRONTEND_HTML_HEADERS)
     return {"status": "ok", "message": "Frontend build not found. Run npm run build in frontend."}
 
 
 @app.head("/", response_model=None)
 def index_head():
-    return Response(status_code=200)
+    return Response(status_code=200, headers=FRONTEND_HTML_HEADERS)
 
 
 @app.get("/embed/hanpass-renewal", response_model=None)
@@ -212,7 +218,7 @@ def spa_fallback(full_path: str):
         raise HTTPException(status_code=404, detail="Not found")
     index_path = settings.frontend_dist_path / "index.html"
     if index_path.exists():
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers=FRONTEND_HTML_HEADERS)
     raise HTTPException(status_code=404, detail="Frontend build not found")
 
 
