@@ -86,7 +86,13 @@ export function DefectCharts({ report }: { report: Report }) {
 
 export function createChartHtml(report: Report): string {
   // Static SVG and inline styles keep the downloaded charts independent of the app and external CDNs.
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>결함 현황</title><style>${reportStyles}</style></head><body>${renderToStaticMarkup(<DefectCharts report={report} />)}</body></html>`;
+  const exportStyles = `${reportStyles}
+.defect-status-report { font-size: 12px; }
+.defect-status-heading h1 { font-size: 22px; }
+.defect-status-heading strong { font-size: 18px; }
+.defect-pie-card h2 { font-size: 16px; }
+`;
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>결함 현황</title><style>${exportStyles}</style></head><body>${renderToStaticMarkup(<DefectCharts report={report} />)}</body></html>`;
 }
 
 function downloadReport(report: Report) {
