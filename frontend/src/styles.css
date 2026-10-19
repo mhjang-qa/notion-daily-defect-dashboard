@@ -70,6 +70,22 @@ label {
   font-weight: 650;
 }
 
+.completed-version-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.completed-version-filter input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #1f6feb;
+  cursor: pointer;
+}
+
 select,
 button {
   height: 36px;

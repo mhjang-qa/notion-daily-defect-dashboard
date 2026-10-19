@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { ClipboardCheck, Play, RefreshCw } from "lucide-react";
 import "./styles.css";
+import { DefectStatusDashboard } from "./defect-status";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -81,10 +82,15 @@ type TestCaseDashboardResponse = {
 };
 
 function App() {
-  const [activeTab, setActiveTab] = useState<"defects" | "testCases">("defects");
+  const [activeTab, setActiveTab] = useState<"defects" | "status" | "testCases">("defects");
   const [versions, setVersions] = useState<string[]>([]);
-  const [targetVersion, setTargetVersion] = useState("");
+  const [selectedVersion, setTargetVersion] = useState("");
+  const [excludeCompleted, setExcludeCompleted] = useState(false);
+  const [versionsRevision, setVersionsRevision] = useState(0);
+  const visibleVersions = versions.filter((version) => !excludeCompleted || !/[（(]\s*완료\s*[)）]/.test(version));
+  const targetVersion = visibleVersions.includes(selectedVersion) ? selectedVersion : visibleVersions[0] || "";
   const [range, setRange] = useState("30d");
+  const dashboardRange = activeTab === "status" ? "all" : range;
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [testCases, setTestCases] = useState<TestCaseDashboardResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -99,10 +105,16 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     if (targetVersion) {
-      loadDashboard(targetVersion, range);
+      loadDashboard(targetVersion, dashboardRange, () => !cancelled);
+    } else {
+      setDashboard(null);
+      setLoading(false);
     }
-  }, [targetVersion, range]);
+    setExpandedId(null);
+    return () => { cancelled = true; };
+  }, [targetVersion, dashboardRange, versionsRevision]);
 
   useEffect(() => {
     if (activeTab === "testCases" && !testCases) {
@@ -110,7 +122,7 @@ function App() {
     }
   }, [activeTab, testCases]);
 
-  const rows = dashboard?.rows ?? [];
+  const rows = dashboard?.target_version === targetVersion ? dashboard.rows : [];
   const latest = rows.at(-1);
   const chartRows = rows.map((row) => ({
     ...row,
@@ -134,6 +146,7 @@ function App() {
     try {
       const data = await request<{ target_versions: string[] }>("/api/target-versions");
       setVersions(data.target_versions);
+      setVersionsRevision((current) => current + 1);
       setTargetVersion((current) => current || data.target_versions[0] || "");
       if (!data.target_versions.length) {
         setMessage("저장된 Snapshot 또는 Notion 목표버전이 없습니다. 지금 데이터 수집을 실행하세요.");
@@ -145,17 +158,17 @@ function App() {
     }
   }
 
-  async function loadDashboard(version: string, selectedRange: string) {
+  async function loadDashboard(version: string, selectedRange: string, isCurrent: () => boolean) {
     setLoading(true);
     setMessage("");
     try {
       const params = new URLSearchParams({ target_version: version, range: selectedRange });
       const data = await request<DashboardResponse>(`/api/dashboard?${params}`);
-      setDashboard(data);
+      if (isCurrent()) setDashboard(data);
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (isCurrent()) setMessage(errorMessage(error));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }
 
@@ -166,9 +179,6 @@ function App() {
       const result = await request<{ target_versions: string[]; item_count: number }>("/api/collect", { method: "POST" });
       setMessage(`수집 완료: ${result.target_versions.length}개 목표버전, ${result.item_count}개 결함`);
       await loadVersions();
-      if (targetVersion) {
-        await loadDashboard(targetVersion, range);
-      }
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -207,25 +217,41 @@ function App() {
         <div>
           <h1>Defect Trend Dashboard</h1>
           <p>
-            {activeTab === "defects"
+            {activeTab !== "testCases"
               ? `Updated ${latest ? formatDateTime(latest.collected_at) : "-"}`
               : `TC Updated ${testCases ? formatDateTime(testCases.updated_at) : "-"}`}
           </p>
         </div>
         <div className="actions">
-          {activeTab === "defects" ? (
+          {activeTab !== "testCases" ? (
             <>
               <label>
                 목표버전
-                <select value={targetVersion} onChange={(event) => setTargetVersion(event.target.value)}>
-                  {versions.map((version) => (
+                <select value={targetVersion} disabled={!visibleVersions.length} onChange={(event) => setTargetVersion(event.target.value)}>
+                  {!visibleVersions.length && <option value="">표시할 목표버전 없음</option>}
+                  {visibleVersions.map((version) => (
                     <option value={version} key={version}>
                       {version}
                     </option>
                   ))}
                 </select>
               </label>
-              <label>
+              <label className="completed-version-filter">
+                <input
+                  type="checkbox"
+                  checked={excludeCompleted}
+                  onChange={(event) => {
+                    const exclude = event.target.checked;
+                    setExcludeCompleted(exclude);
+                    setTargetVersion((current) => {
+                      const available = versions.filter((version) => !exclude || !/[（(]\s*완료\s*[)）]/.test(version));
+                      return available.includes(current) ? current : available[0] || "";
+                    });
+                  }}
+                />
+                (완료) 버전 제외
+              </label>
+              {activeTab === "defects" && <label>
                 기간
                 <select value={range} onChange={(event) => setRange(event.target.value)}>
                   <option value="7d">최근 7일</option>
@@ -233,7 +259,7 @@ function App() {
                   <option value="30d">최근 30일</option>
                   <option value="all">전체</option>
                 </select>
-              </label>
+              </label>}
               <button onClick={loadVersions} disabled={loading} title="새로고침">
                 <RefreshCw size={16} />
                 새로고침
@@ -256,6 +282,9 @@ function App() {
         <button className={activeTab === "defects" ? "active" : ""} type="button" onClick={() => setActiveTab("defects")}>
           결함 추이
         </button>
+        <button className={activeTab === "status" ? "active" : ""} type="button" onClick={() => setActiveTab("status")}>
+          결함 현황
+        </button>
         <button className={activeTab === "testCases" ? "active" : ""} type="button" onClick={() => setActiveTab("testCases")}>
           <ClipboardCheck size={16} />
           테스트케이스 현황
@@ -263,9 +292,14 @@ function App() {
       </nav>
 
       {message && <div className="notice">{message}</div>}
+      {activeTab !== "testCases" && excludeCompleted && versions.length > 0 && !visibleVersions.length && (
+        <div className="notice" role="status">완료 버전을 제외하면 표시할 목표버전이 없습니다. 체크를 해제하면 전체 버전을 확인할 수 있습니다.</div>
+      )}
 
       {activeTab === "testCases" ? (
         <TestCaseDashboard data={testCases} loading={testCaseLoading} />
+      ) : activeTab === "status" ? (
+        <DefectStatusDashboard version={targetVersion} snapshot={latest} loading={loading} revision={versionsRevision} apiBase={API_BASE} />
       ) : (
         <>
       <section className="kpis">

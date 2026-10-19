@@ -153,3 +153,21 @@ Property명이 바뀌면 `notion_repository.py`의 `PropertyMapping` 후보 목�
 cd backend
 PYTHONPATH=. pytest
 ```
+
+
+## 결함 현황 및 차트 HTML 다운로드
+
+- 상단 `결함 현황` 버튼에서 선택한 목표버전의 최신 Snapshot을 기준으로 상태별·등급별 파이차트를 확인합니다. 등급은 결함의 Severity 값입니다.
+- 각 범례에 항목별 개수와 비율, 차트 하단에 합계를 표시합니다. 비어 있는 상태·등급은 `미지정`으로 집계합니다.
+- `(완료) 버전 제외` 필터는 결함 현황에서도 적용됩니다.
+- `차트 HTML 다운로드`는 두 차트와 범례, 버전 및 수집 기준만 담은 독립 HTML 파일을 저장합니다. 다른 탭, 버튼, 결함 목록은 포함하지 않습니다.
+- 다운로드 파일은 SVG와 CSS를 내장하므로 앱 서버 연결이나 외부 스크립트 없이 열 수 있습니다. 다운로드 시점의 정적 보고서입니다.
+- 최신 Snapshot이 없거나 상세 데이터 조회가 실패한 경우에는 다운로드를 제공하지 않습니다. 0건 Snapshot은 빈 차트 안내와 합계 0건으로 내보냅니다.
+
+프론트엔드 검증:
+
+```bash
+cd frontend
+node --test tests/defect-status.test.cjs
+npm run build
+```
