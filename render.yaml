@@ -37,3 +37,7 @@ services:
         value: https://mhjang-qa.github.io/Automated-Report-Generation-/defect-dashboard/hanpass-renewal.html
       - key: GITHUB_PAGES_TOKEN
         sync: false
+      - key: EMBED_ADMIN_PASSWORD
+        sync: false
+      - key: EMBED_ADMIN_SESSION_SECRET
+        generateValue: true

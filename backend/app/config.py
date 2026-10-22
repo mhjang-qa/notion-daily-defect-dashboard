@@ -28,6 +28,8 @@ load_dotenv(BACKEND_DIR / ".env")
 
 
 class Settings(BaseModel):
+    embed_admin_password: str = Field(default="", alias="EMBED_ADMIN_PASSWORD")
+    embed_admin_session_secret: str = Field(default="", alias="EMBED_ADMIN_SESSION_SECRET")
     notion_token: str = Field(default="", alias="NOTION_TOKEN")
     notion_database_id: str = Field(default="", alias="NOTION_DATABASE_ID")
     notion_version: str = Field(default="2022-06-28", alias="NOTION_VERSION")

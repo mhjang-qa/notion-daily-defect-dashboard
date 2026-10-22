@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import secrets
 import time
 from datetime import datetime
 from threading import Thread
@@ -27,7 +28,7 @@ from .test_case_repository import DEFAULT_TEST_CASE_SOURCE_URL, TestCaseReposito
 settings = get_settings()
 app = FastAPI(title="Notion Daily Defect Dashboard", version="0.1.0")
 scheduler = None
-ADMIN_PASSWORD = "xptmxm123!"
+_EPHEMERAL_ADMIN_SECRET = secrets.token_urlsafe(48)
 ADMIN_COOKIE_NAME = "hanpass_embed_admin"
 ADMIN_COOKIE_TTL_SECONDS = 12 * 60 * 60
 
@@ -124,7 +125,9 @@ async def sync_hanpass_renewal_embed(request: Request) -> dict[str, str | bool]:
 
 @app.post("/api/embed/hanpass-renewal/admin-login")
 def login_hanpass_renewal_embed_admin(payload: AdminLoginRequest, request: Request) -> JSONResponse:
-    if not hmac.compare_digest(payload.password, ADMIN_PASSWORD):
+    if not settings.embed_admin_password:
+        raise HTTPException(status_code=503, detail="Set EMBED_ADMIN_PASSWORD to enable admin login")
+    if not hmac.compare_digest(payload.password.encode("utf-8"), settings.embed_admin_password.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid password")
     response = JSONResponse({"ok": True})
     is_cross_origin = bool(request.headers.get("origin"))
@@ -242,6 +245,8 @@ def make_embed_admin_token() -> str:
 
 
 def require_embed_admin(request: Request) -> None:
+    if not settings.embed_admin_password:
+        raise HTTPException(status_code=503, detail="Set EMBED_ADMIN_PASSWORD to enable admin login")
     token = request.cookies.get(ADMIN_COOKIE_NAME, "")
     try:
         expires_at, signature = token.split(":", 1)
@@ -255,4 +260,6 @@ def require_embed_admin(request: Request) -> None:
 
 
 def _embed_admin_secret() -> bytes:
-    return (settings.notion_token or settings.notion_database_id or ADMIN_PASSWORD).encode("utf-8")
+    # Never sign cookies with a public database ID or an upstream API credential.
+    secret = settings.embed_admin_session_secret or _EPHEMERAL_ADMIN_SECRET
+    return (secret + "\0" + settings.embed_admin_password).encode("utf-8")

@@ -171,3 +171,7 @@ cd frontend
 node --test tests/defect-status.test.cjs
 npm run build
 ```
+
+## 관리자 인증 설정
+
+관리자 로그인 비밀번호는 `EMBED_ADMIN_PASSWORD` 환경변수에 설정합니다. 미설정 시 관리자 로그인과 관리자 전용 동기화는 503으로 차단하고 공개 대시보드는 유지합니다. 공개 코드에 있던 이전 비밀번호를 재사용하지 마세요. 쿠키 서명에는 `EMBED_ADMIN_SESSION_SECRET`에 충분히 긴 난수 키를 설정합니다. Notion 토큰이나 DB ID를 서명 키로 재사용하지 않습니다. 미설정 시 프로세스 임시 키를 사용하므로 재시작 시 재로그인하며 여러 worker 간 세션은 공유되지 않습니다. 비밀번호 변경 시 기존 쿠키도 무효화됩니다. Render Blueprint에는 비밀번호를 수동 입력하고 세션 키를 자동 생성하도록 설정했습니다. 기존 배포에도 환경변수를 적용해야 합니다.
